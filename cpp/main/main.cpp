@@ -1,0 +1,207 @@
+/*! \file main.cpp
+ *  \brief Запуск модели квадрокоптера OS4 (аналог sim('OS4dynamics_01'))
+ *
+ *  Параметры командной строки:
+ *   --time   T     время моделирования, с (по умолчанию 5, как StopTime в Simulink)
+ *   --freq   F     частота расчета, Гц: 1, 6.25, 12.5, 25, 50, 100, 200, 400
+ *                  (по умолчанию 400 - setFreq(Hz400), шаг 2.5 мс)
+ *   --dt     H     задать шаг интегрирования вручную, с (вместо --freq)
+ *   --out    FILE  CSV-файл результатов (по умолчанию os4sim.csv)
+ *   --decim  N     писать каждый N-й шаг (по умолчанию 4, т.е. раз в 10 мс)
+ *   --throttle V   газ на все ESC, 0..1 (по умолчанию 0.5, висение около 0.43)
+ *   --tau    V     подавать на моторы момент V, Н*м, без модели ESC (как в Simulink)
+ *   --simulink     вариант "как в Simulink": гироскопический момент без Ip,
+ *                  угол лопасти, равный R, вход - момент 0.1 Н*м без ESC
+ *                  (по умолчанию - исправленный вариант с ESC)
+ *   --realtime     считать в реальном времени (1 с модели = 1 с по часам);
+ *                  с --time 0 расчет идет до Ctrl+C
+ *   --mppm         запустить модуль МППМ (UDP, порт 9999): доступны
+ *                  OS4_Setup, OS4_Input, OS4_Output, ESC_Setup, ESC_Output
+ *   --mppm-port N  порт МППМ (включает --mppm)
+ *   --print  P     период вывода состояния в консоль, с
+ *                  (по умолчанию 0.5 в реальном времени, иначе 0 - не выводить)
+*/
+#include "dispOS4.h"
+#include "os4Vehicle.h"
+#include "globalNameID.h"
+#include "threadManager.h"
+#include "mppm.h"
+
+#include <atomic>
+#include <chrono>
+#include <csignal>
+#include <iostream>
+#include <thread>
+#include <string>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+
+//! признак остановки по Ctrl+C
+static volatile std::sig_atomic_t stopSignal = 0;
+static void onSignal(int)
+{
+    stopSignal = 1;
+}
+
+static void printUsage()
+{
+    std::cout << "usage: os4sim [--time T] [--dt H] [--out FILE] [--decim N]"
+                 " [--throttle V] [--tau V] [--simulink] [--realtime] [--freq F] [--print P]"
+                 " [--mppm] [--mppm-port N]" << std::endl;
+}
+
+int main(int argc, char *argv[])
+{
+    double      tEnd     = 5.0;
+    double      dt       = 0.0;      // 0 - шаг задается частотой
+    double      freq     = 400.0;
+    std::string fileName = "os4sim.csv";
+    int         decim    = 4;
+    double      tau      = -1.0;     // < 0 - момент не задан, работает ESC
+    double      throttle = -1.0;     // < 0 - по умолчанию
+    bool        simulink = false;
+    bool        realtime = false;
+    bool        useMppm  = false;
+    int         mppmPort = MPPM_DEFAULT_PORT;
+    double      print    = -1.0;
+
+    for(int i = 1; i < argc; i++)
+    {
+        std::string arg = argv[i];
+        bool hasValue   = (i + 1 < argc);
+        if     (arg == "--time"  && hasValue) tEnd     = atof(argv[++i]);
+        else if(arg == "--dt"    && hasValue) dt       = atof(argv[++i]);
+        else if(arg == "--out"   && hasValue) fileName = argv[++i];
+        else if(arg == "--decim" && hasValue) decim    = atoi(argv[++i]);
+        else if(arg == "--tau"   && hasValue) tau      = atof(argv[++i]);
+        else if(arg == "--throttle" && hasValue) throttle = atof(argv[++i]);
+        else if(arg == "--simulink")          simulink = true;
+        else if(arg == "--realtime")          realtime = true;
+        else if(arg == "--mppm")              useMppm  = true;
+        else if(arg == "--mppm-port" && hasValue){mppmPort = atoi(argv[++i]); useMppm = true;}
+        else if(arg == "--freq"  && hasValue) freq     = atof(argv[++i]);
+        else if(arg == "--print" && hasValue) print    = atof(argv[++i]);
+        else
+        {
+            printUsage();
+            return 1;
+        }
+    }
+
+    DispOS4 disp(ID_DispOS4, fileName, decim);
+    // частота расчета
+    if(dt > 0.0)
+        disp.setTimeStep(dt);
+    else
+    {
+        ICalculateElement::Freq f = ICalculateElement::HzInf;
+        for(int k = ICalculateElement::Hz1; k < ICalculateElement::HzInf; k++)
+        {
+            ICalculateElement::Freq fk = (ICalculateElement::Freq)k;
+            if(fabs(ICalculateElement::freqToHz(fk) - freq) < 1e-9)
+                f = fk;
+        }
+        if(f == ICalculateElement::HzInf)
+        {
+            std::cerr << "--freq: допустимы 1, 6.25, 12.5, 25, 50, 100, 200, 400" << std::endl;
+            return 1;
+        }
+        disp.setFreq(f);
+    }
+    // настройка модели до инициализации
+    OS4Vehicle *os4 = disp.vehicle();
+    if(simulink)
+        os4->options.useESC = false;
+    for(int i = 0; i < OS4_NUM_ROTORS; i++)
+    {
+        if(throttle >= 0.0)
+            os4->input.throttle[i] = throttle;
+        if(tau >= 0.0)
+            os4->input.tau[i] = tau;
+    }
+    if(tau >= 0.0)
+        os4->options.useESC = false;
+    if(simulink)
+    {
+        os4->options.gyroWithIp  = false;
+        os4->options.useThetaTip = false;
+    }
+
+    if(tEnd <= 0.0 && realtime == false)
+    {
+        std::cerr << "--time 0 допускается только с --realtime" << std::endl;
+        return 1;
+    }
+    disp.setEndTime(tEnd);
+    disp.setConsolePeriod(print >= 0.0 ? print : (realtime ? 0.5 : 0.0));
+
+    // модуль МППМ: создается до prepare(), чтобы модель зарегистрировала в нем свои данные
+    MPPM *mppm = nullptr;
+    if(useMppm)
+    {
+        mppm = disp.createMPPM((uint16_t)mppmPort);
+        if(mppm == nullptr)
+            return 1;
+    }
+
+    if(disp.prepare() == false)
+        return 1;
+
+    // поток МППМ без таймера: ждет запросы и сразу отвечает
+    Thread *threadMPPM = nullptr;
+    if(mppm != nullptr)
+    {
+        threadMPPM = new Thread("pthMPPM", mppm, 0.0);
+        threadMPPM->setUseTimer(false);
+        threadMPPM->create();
+        std::cout << "MPPM: порт " << mppmPort << ", зарегистрировано:";
+        for(const auto &t : mppm->table)
+            std::cout << " " << t.name << "(" << t.size << " байт)";
+        std::cout << std::endl;
+    }
+
+    if(realtime)
+    {
+        // поток с таймером: один шаг расчета за каждый период timeStep()
+        std::signal(SIGINT, onSignal);
+        Thread thread("pthOS4", &disp, disp.timeStep());
+        thread.setUseTimer(true);
+        thread.create();
+        while(thread.isFinished() == false)
+        {
+            if(stopSignal != 0)
+                thread.stop();
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        thread.join();
+        std::cout << "шагов: " << thread.callCount
+                  << ", не уложились в период: " << thread.missingCallCount
+                  << ", макс. время шага: " << thread.maxCalcTime * 1000.0 << " мс"
+                  << " (период " << disp.timeStep() * 1000.0 << " мс)" << std::endl;
+    }
+    else
+        disp.run(tEnd);
+
+    if(threadMPPM != nullptr)
+    {
+        threadMPPM->stop();
+        threadMPPM->join();
+        delete threadMPPM;
+    }
+
+    const TOS4Output &o = os4->output;
+    std::cout << "t = "         << o.time << " c" << std::endl
+              << "Xe [м]     = " << o.Xe.x << " " << o.Xe.y << " " << o.Xe.z << std::endl
+              << "Ve [м/с]   = " << o.Ve.x << " " << o.Ve.y << " " << o.Ve.z << std::endl
+              << "pqr [рад/с]= " << o.pqr.x << " " << o.pqr.y << " " << o.pqr.z << std::endl
+              << "euler [град] = " << o.euler.x * radToGrad << " "
+                                   << o.euler.y * radToGrad << " "
+                                   << o.euler.z * radToGrad << std::endl
+              << "omega [рад/с]= " << o.omega[0] << " " << o.omega[1] << " "
+                                   << o.omega[2] << " " << o.omega[3] << std::endl
+              << "T [Н]      = " << o.T[0] << " " << o.T[1] << " "
+                                 << o.T[2] << " " << o.T[3] << std::endl;
+    std::cout << "results: " << fileName << std::endl;
+    return 0;
+}
