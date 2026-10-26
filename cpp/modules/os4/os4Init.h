@@ -20,7 +20,7 @@ TOS4Physical os4PhysicalInit();
 */
 TOS4Setup os4SetupInit();
 
-/*! Входные параметры по умолчанию (0.1 Н*м на каждый мотор)
+/*! Входные параметры по умолчанию (газ 0.5 или 0.1 Н*м на каждый мотор)
  * \ingroup os4
 */
 TOS4Input os4InputInit();

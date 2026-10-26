@@ -2,6 +2,7 @@
 #include "os4Vehicle.h"
 #include "report.h"
 #include "mppm.h"
+#include "escModel.h"
 #include "globalNameID.h"
 #include <iostream>
 #include <iomanip>
@@ -95,8 +96,11 @@ void DispOS4::printState()
               << "  V=" << std::setw(6) << o.aero.Vinf
               << "  крен=" << std::setw(7) << o.euler.x * radToGrad
               << "  тангаж=" << std::setw(7) << o.euler.y * radToGrad
-              << "  курс=" << std::setw(7) << o.euler.z * radToGrad
-              << std::endl;
+              << "  курс=" << std::setw(7) << o.euler.z * radToGrad;
+    if(os4->options.useESC)
+        std::cout << "  Uбат=" << std::setw(5) << os4->esc->output.Ubat
+                  << "  Iбат=" << std::setw(5) << os4->esc->output.Ibat;
+    std::cout << std::endl;
     std::cout.flags(flags);
     std::cout.precision(prec);
 }

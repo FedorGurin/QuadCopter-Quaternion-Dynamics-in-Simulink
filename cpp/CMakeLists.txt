@@ -11,6 +11,7 @@ include_directories(
         kernel/global
         kernel/interfaces
         modules/os4
+        modules/esc
         main/dispOS4
         service/debug
         service/sys
@@ -41,6 +42,9 @@ add_library(os4kernel STATIC
         modules/os4/os4Equations.cpp
         modules/os4/os4Vehicle.h
         modules/os4/os4Vehicle.cpp
+        modules/esc/escData.h
+        modules/esc/escModel.h
+        modules/esc/escModel.cpp
         service/debug/report.h
         service/debug/report.cpp
         service/sys/threadManager.h

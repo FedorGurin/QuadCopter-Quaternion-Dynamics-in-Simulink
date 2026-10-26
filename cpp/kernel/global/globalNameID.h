@@ -21,6 +21,7 @@ enum EGlobalProtoID{
     ID_OS4FuselageModel         ,   /*подсистема "fuselage aerodynamics"*/
     ID_OS4PropellerModel        ,   /*подсистема "Propeller & motor dynamics"*/
     ID_OS4EquationsModel        ,   /*подсистема "12 ODEs"*/
+    ID_ESCModel                 ,   /*ESC + мотор + батарея*/
     ID_REPORT                   ,   /*запись результатов в файл*/
     ID_MPPM                     ,   /*модуль МППМ и его интерфейс регистрации IRegMPPM*/
 
@@ -30,6 +31,8 @@ enum EGlobalProtoID{
     ID_OS4_State                ,   /*вектор состояния, по которому считаются производные*/
     ID_OS4_Input                ,   /*входные параметры: команда на моторы (вход control)*/
     ID_OS4_Setup                ,   /*настроечные параметры: начальные условия*/
+    ID_ESC_Setup                ,   /*параметры ESC, мотора и батареи*/
+    ID_ESC_Output               ,   /*выход ESC: характеристика мотора, токи, батарея*/
     ID_OS4_Aero                 ,   /*сигнал Aero: [Vb, Vinf, psi, theta, rho]*/
     ID_OS4_Gravity              ,   /*сила тяжести и g в связанной СК (IMU_acc_g)*/
     ID_OS4_Fuselage             ,   /*силы и моменты корпуса*/

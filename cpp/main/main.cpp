@@ -8,13 +8,15 @@
  *   --dt     H     задать шаг интегрирования вручную, с (вместо --freq)
  *   --out    FILE  CSV-файл результатов (по умолчанию os4sim.csv)
  *   --decim  N     писать каждый N-й шаг (по умолчанию 4, т.е. раз в 10 мс)
- *   --tau    V     постоянная команда на моторы, Н*м (по умолчанию 0.1)
- *   --simulink     вариант "как в Simulink": гироскопический момент без Ip
- *                  и угол лопасти, равный R (по умолчанию - исправленный вариант)
+ *   --throttle V   газ на все ESC, 0..1 (по умолчанию 0.5, висение около 0.43)
+ *   --tau    V     подавать на моторы момент V, Н*м, без модели ESC (как в Simulink)
+ *   --simulink     вариант "как в Simulink": гироскопический момент без Ip,
+ *                  угол лопасти, равный R, вход - момент 0.1 Н*м без ESC
+ *                  (по умолчанию - исправленный вариант с ESC)
  *   --realtime     считать в реальном времени (1 с модели = 1 с по часам);
  *                  с --time 0 расчет идет до Ctrl+C
  *   --mppm         запустить модуль МППМ (UDP, порт 9999): доступны
- *                  OS4_Setup, OS4_Input, OS4_Output
+ *                  OS4_Setup, OS4_Input, OS4_Output, ESC_Setup, ESC_Output
  *   --mppm-port N  порт МППМ (включает --mppm)
  *   --print  P     период вывода состояния в консоль, с
  *                  (по умолчанию 0.5 в реальном времени, иначе 0 - не выводить)
@@ -45,7 +47,7 @@ static void onSignal(int)
 static void printUsage()
 {
     std::cout << "usage: os4sim [--time T] [--dt H] [--out FILE] [--decim N]"
-                 " [--tau V] [--simulink] [--realtime] [--freq F] [--print P]"
+                 " [--throttle V] [--tau V] [--simulink] [--realtime] [--freq F] [--print P]"
                  " [--mppm] [--mppm-port N]" << std::endl;
 }
 
@@ -56,7 +58,8 @@ int main(int argc, char *argv[])
     double      freq     = 400.0;
     std::string fileName = "os4sim.csv";
     int         decim    = 4;
-    double      tau      = 0.1;
+    double      tau      = -1.0;     // < 0 - момент не задан, работает ESC
+    double      throttle = -1.0;     // < 0 - по умолчанию
     bool        simulink = false;
     bool        realtime = false;
     bool        useMppm  = false;
@@ -72,6 +75,7 @@ int main(int argc, char *argv[])
         else if(arg == "--out"   && hasValue) fileName = argv[++i];
         else if(arg == "--decim" && hasValue) decim    = atoi(argv[++i]);
         else if(arg == "--tau"   && hasValue) tau      = atof(argv[++i]);
+        else if(arg == "--throttle" && hasValue) throttle = atof(argv[++i]);
         else if(arg == "--simulink")          simulink = true;
         else if(arg == "--realtime")          realtime = true;
         else if(arg == "--mppm")              useMppm  = true;
@@ -107,8 +111,17 @@ int main(int argc, char *argv[])
     }
     // настройка модели до инициализации
     OS4Vehicle *os4 = disp.vehicle();
+    if(simulink)
+        os4->options.useESC = false;
     for(int i = 0; i < OS4_NUM_ROTORS; i++)
-        os4->input.tau[i] = tau;
+    {
+        if(throttle >= 0.0)
+            os4->input.throttle[i] = throttle;
+        if(tau >= 0.0)
+            os4->input.tau[i] = tau;
+    }
+    if(tau >= 0.0)
+        os4->options.useESC = false;
     if(simulink)
     {
         os4->options.gyroWithIp  = false;

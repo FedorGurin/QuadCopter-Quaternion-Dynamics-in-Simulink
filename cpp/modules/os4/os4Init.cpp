@@ -68,7 +68,10 @@ TOS4Input os4InputInit()
 {
     TOS4Input input;
     for(int i = 0; i < OS4_NUM_ROTORS; i++)
-        input.tau[i] = 0.1;
+    {
+        input.throttle[i] = 0.5;
+        input.tau[i]      = 0.1;
+    }
     return input;
 }
 
@@ -78,5 +81,6 @@ TOS4Options os4DefaultOptions()
     opt.gyroWithIp      = true;     // исправление: в Simulink false
     opt.useThetaTip     = true;     // исправление: в Simulink false
     opt.stopOnCollision = true;
+    opt.useESC          = true;     // в Simulink вход - момент мотора
     return opt;
 }

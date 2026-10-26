@@ -5,6 +5,7 @@
 #include "os4Fuselage.h"
 #include "os4Propeller.h"
 #include "os4Equations.h"
+#include "escModel.h"
 #include "globalNameID.h"
 #include "IMsg.h"
 #include <iostream>
@@ -23,11 +24,16 @@ OS4Vehicle::OS4Vehicle(uint32_t idClass):ICalculateElement(idClass)
     options   = os4DefaultOptions();
 
     // подчиненные модули в порядке расчета
-    addElement(new OS4AeroValue(ID_OS4AeroValueModel));
-    addElement(new OS4Gravity  (ID_OS4GravityModel));
-    addElement(new OS4Fuselage (ID_OS4FuselageModel));
-    addElement(new OS4Propeller(ID_OS4PropellerModel));
-    addElement(new OS4Equations(ID_OS4EquationsModel));
+    dynElements.push_back(new OS4AeroValue(ID_OS4AeroValueModel));
+    dynElements.push_back(new OS4Gravity  (ID_OS4GravityModel));
+    dynElements.push_back(new OS4Fuselage (ID_OS4FuselageModel));
+    dynElements.push_back(new OS4Propeller(ID_OS4PropellerModel));
+    dynElements.push_back(new OS4Equations(ID_OS4EquationsModel));
+    for(auto ele : dynElements)
+        addElement(ele);
+    // ESC: подчиненный модуль, считается один раз за шаг
+    esc = new ESCModel(ID_ESCModel);
+    addElement(esc);
 
     // указываем зависимость
     bindTo(ID_OS4_Aero,       &aero);
@@ -51,8 +57,6 @@ void OS4Vehicle::setControl(const double tau[OS4_NUM_ROTORS])
 }
 void OS4Vehicle::init()
 {
-    ICalculateElement::init();
-
     // регистрация параметров в МППМ (как MsgRegMPPM в SimTVRS)
     IRegMPPM *mppm = (IRegMPPM *)findShared(ID_MPPM);
     if(mppm != nullptr)
@@ -61,6 +65,8 @@ void OS4Vehicle::init()
         mppm->addReq(ptrToReq("OS4_Input",  &input));
         mppm->addReq(ptrToReq("OS4_Output", &output));
     }
+    // подчиненные модули (ESC регистрирует ESC_Setup и ESC_Output)
+    ICalculateElement::init();
     applySetup();
 }
 void OS4Vehicle::applySetup()
@@ -80,6 +86,7 @@ void OS4Vehicle::applySetup()
     }
     time        = 0.0;
     setup.reset = 0;
+    esc->restart();
     setStart();
     finite();
 }
@@ -87,7 +94,7 @@ void OS4Vehicle::derivatives(const TOS4State &state, TOS4State &dx)
 {
     // все подчиненные модули считают по состоянию xEval
     xEval = state;
-    for(auto ele : *returnElements())
+    for(auto ele : dynElements)
         ele->calculate();
     dx = *dxEval;
 }
@@ -108,6 +115,13 @@ void OS4Vehicle::calculate()
     }
     if(isStop())
         return;
+    // ESC: напряжение на моторах на этот шаг по газу и текущим оборотам
+    if(options.useESC)
+    {
+        xEval = x;
+        esc->calculate();
+    }
+
     double in [OS4_STATE_SIZE];
     double out[OS4_STATE_SIZE];
 

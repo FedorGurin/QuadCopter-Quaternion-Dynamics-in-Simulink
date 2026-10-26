@@ -5,6 +5,9 @@
 
 #include "ICalculateElement.h"
 #include "os4Data.h"
+#include <list>
+
+class ESCModel;
 
 /*! \brief Квадрокоптер OS4 (верхний уровень модели OS4dynamics_01.slx)
  *
@@ -15,6 +18,8 @@
  *   3. OS4Fuselage   - "fuselage aerodynamics"
  *   4. OS4Propeller  - "Propeller & motor dynamics"
  *   5. OS4Equations  - "12 ODEs"
+ *  и модуль ESCModel (modules/esc): он считается один раз за шаг перед
+ *  интегрированием и задает характеристику моторов по газу.
  *
  *  Настроечные (setup), входные (input) и выходные (output) параметры
  *  регистрируются в МППМ при init(), если модуль МППМ запущен.
@@ -58,6 +63,8 @@ public:
     TOS4Options   options;
     //! выходные параметры (МППМ: "OS4_Output")
     TOS4Output    output;
+    //! модуль ESC + мотор + батарея
+    ESCModel     *esc;
     //! модельное время, с
     double        time;
 
@@ -67,6 +74,8 @@ private:
     //! состояние, по которому подчиненные модули считают производные
     TOS4State  xEval;
 
+    //! модули, которые считаются на каждой стадии RK4
+    std::list<ICalculateElement *> dynElements;
     //! выходы подчиненных модулей
     TOS4Aero      *aero;
     TOS4Gravity   *gravity;

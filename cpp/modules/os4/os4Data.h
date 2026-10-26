@@ -97,16 +97,19 @@ typedef struct
     uint8_t     reset;
 }TOS4Setup;
 
-/*! \brief Входные параметры модуля OS4 (вход control модели Simulink)
+/*! \brief Входные параметры модуля OS4
  *
  * Доступны через МППМ под именем "OS4_Input".
- * По умолчанию на все моторы подается 0.1 Н*м (блок Constant
- * [0.1 0.1 0.1 0.1] перед "Input Switch").
+ * При включенном ESC (по умолчанию) используется газ throttle,
+ * иначе - момент tau, как на входе control модели Simulink
+ * (по умолчанию 0.1 Н*м: блок Constant [0.1 0.1 0.1 0.1]).
  * \ingroup data
 */
 typedef struct
 {
-    //! команда на моторы (момент), Н*м; ограничивается диапазоном [0, 0.2]
+    //! газ на ESC, 0..1
+    double throttle[OS4_NUM_ROTORS];
+    //! команда на моторы (момент) без ESC, Н*м; ограничивается диапазоном [0, 0.2]
     double tau[OS4_NUM_ROTORS];
 }TOS4Input;
 
@@ -131,6 +134,10 @@ typedef struct
     bool useThetaTip;
     //! останавливать расчет при касании винтом земли (Stop Simulation)
     bool stopOnCollision;
+    /*! Моторы управляются через модуль ESC (газ 0..1, мотор, батарея).
+     *  Если выключено - на вход подается момент tau, как в Simulink.
+    */
+    bool useESC;
 }TOS4Options;
 
 //! размер вектора состояния: 3+3+3+4 твердое тело, 4 скорости винтов, 4 индуктивных потока \ingroup data

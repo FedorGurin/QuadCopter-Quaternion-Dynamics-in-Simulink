@@ -5,6 +5,7 @@
 
 #include "ICalculateElement.h"
 #include "os4Data.h"
+#include "escData.h"
 
 /*! \brief Винты и моторы (подсистема "Propeller & motor dynamics")
  *
@@ -24,7 +25,9 @@
  *   - коэффициент момента (3.4): C_Q = max(C_T*sqrt(C_T/2), 0.001)
  *   - тяга [5.5]:   T = rho*pi*R^2*R^2*C_T*w^2
  *   - момент [5.6]: Q = rho*pi*R^2*R^3*C_Q*w*|w|
- *   - мотор [2.30]: dw/dt = (tau - Q) / Ip
+ *   - мотор [2.30]: dw/dt = (tau - Q) / Ip, где tau - момент с входа
+ *     (как в Simulink) или по характеристике мотора от ESC:
+ *     tau = max(0, torque0 - slope*w)
  *
  *  Сила и моменты на корпус:
  *   Fe = q * [0, 0, -sum(T)] * q~
@@ -53,6 +56,8 @@ private:
     TOS4Aero     *aero;
     //! входные параметры: команда на моторы, Н*м
     TOS4Input    *input;
+    //! выход ESC: характеристика мотора
+    TESCOutput   *esc;
 };
 
 #endif // OS4_PROPELLER_H

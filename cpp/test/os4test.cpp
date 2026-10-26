@@ -7,6 +7,7 @@
 #include "math_func.h"
 #include "threadManager.h"
 #include "mppm.h"
+#include "escModel.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -190,6 +191,46 @@ static void testRealtime()
     CHECK_NEAR(rt.vehicle()->output.Xe.z, fast.vehicle()->output.Xe.z, 1e-12);
 }
 
+//! ESC: висение на газе около 0.43, баланс токов, разряд батареи
+static void testESC()
+{
+    DispOS4 disp(ID_DispOS4, "", 1);
+    OS4Vehicle *os4 = disp.vehicle();
+    os4->setup.euler = TVector3();
+    os4->setup.vel   = TVector3();
+    os4->setup.pos   = TVector3(0.0, 0.0, -10.0);
+    for(int i = 0; i < OS4_NUM_ROTORS; i++)
+    {
+        os4->setup.omega[i]    = 1100.0;
+        os4->input.throttle[i] = 0.43;
+    }
+    CHECK(disp.prepare());
+    disp.run(3.0);
+
+    const TESCOutput &e = os4->esc->output;
+    CHECK(fabs(os4->output.Ve.z) < 1.0);                         // почти висит
+    CHECK(os4->output.omega[0] > 1050.0 && os4->output.omega[0] < 1250.0);
+    double Ibat = 0.0;
+    for(int i = 0; i < OS4_NUM_ROTORS; i++)
+        Ibat += e.duty[i] * e.I[i];
+    CHECK_NEAR(e.Ibat, Ibat, 1e-9);
+    CHECK(e.Ibat > 3.0 && e.Ibat < 10.0);
+    CHECK(e.Ubat < 12.6 && e.Ubat > 12.0);                      // 3S, просадка под нагрузкой
+    CHECK(e.soc < 1.0 && e.used > 0.0);
+    // ток мотора и момент на валу связаны через Kt
+    double Kt = 60.0 / (2.0 * M_PI * os4->esc->setup.kv);
+    CHECK_NEAR(os4->output.tau[0], Kt * (e.I[0] - os4->esc->setup.I0), 2e-3);
+
+    // газ 0: момента нет, винты тормозятся
+    DispOS4 off(ID_DispOS4, "", 1);
+    for(int i = 0; i < OS4_NUM_ROTORS; i++)
+        off.vehicle()->input.throttle[i] = 0.0;
+    CHECK(off.prepare());
+    off.run(0.5);
+    CHECK(off.vehicle()->output.omega[0] < 2100.0);
+    CHECK_NEAR(off.vehicle()->output.tau[0], 0.0, 1e-12);
+}
+
 //! клиент МППМ: отправить запрос и дождаться ответа
 template<typename T> static bool mppmExchange(UdpSocket &client, T &req, uint16_t serverPort, uint16_t clientPort)
 {
@@ -225,7 +266,7 @@ static void testMPPM()
     if(mppm == nullptr)
         return;
     CHECK(disp.prepare());
-    CHECK(mppm->table.size() == 3);
+    CHECK(mppm->table.size() == 5);   // OS4_Setup/Input/Output, ESC_Setup/Output
 
     Thread thread("pthMPPM", mppm, 0.0);
     thread.create();
@@ -309,6 +350,7 @@ int main()
     testRun();
     testRealtime();
     testMPPM();
+    testESC();
     if(failed == 0)
         std::cout << "all tests passed" << std::endl;
     return failed == 0 ? 0 : 1;
