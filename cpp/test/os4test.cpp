@@ -5,6 +5,10 @@
 #include "os4Vehicle.h"
 #include "globalNameID.h"
 #include "math_func.h"
+#include "threadManager.h"
+
+#include <chrono>
+#include <thread>
 
 #include <iostream>
 #include <math.h>
@@ -152,6 +156,31 @@ static void testRun()
     CHECK_NEAR(f.Xe.z, o.Xe.z, 1e-3 * (1.0 + fabs(o.Xe.z)));
 }
 
+//! реальное время: 0.3 с модели считаются за ~0.3 с по часам и дают тот же результат
+static void testRealtime()
+{
+    DispOS4 fast(ID_DispOS4, 0.001, "", 1);
+    CHECK(fast.prepare());
+    fast.run(0.3);
+
+    DispOS4 rt(ID_DispOS4, 0.001, "", 1);
+    rt.setEndTime(0.3);
+    CHECK(rt.prepare());
+    Thread thread("pthTest", &rt, rt.frameStepSec());
+    thread.setUseTimer(true);
+
+    std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+    thread.create();
+    thread.join();
+    double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+
+    CHECK(thread.isFinished());
+    CHECK(thread.callCount == 30);
+    CHECK(wall > 0.28 && wall < 0.5);
+    CHECK_NEAR(rt.vehicle()->output.time, 0.3, 1e-9);
+    CHECK_NEAR(rt.vehicle()->output.Xe.z, fast.vehicle()->output.Xe.z, 1e-12);
+}
+
 int main()
 {
     testQuaternion();
@@ -160,6 +189,7 @@ int main()
     testGyroIp();
     testGroundEffect();
     testRun();
+    testRealtime();
     if(failed == 0)
         std::cout << "all tests passed" << std::endl;
     return failed == 0 ? 0 : 1;

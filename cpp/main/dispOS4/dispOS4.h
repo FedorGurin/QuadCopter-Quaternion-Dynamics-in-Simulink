@@ -12,8 +12,12 @@ class Report;
 /*! \brief Диспетчер моделирования квадрокоптера
  *
  *  Корень дерева модулей: содержит модель OS4Vehicle и модуль записи
- *  результатов Report. Выполняет связывание, инициализацию и цикл
- *  моделирования до заданного времени (StopTime в Simulink).
+ *  результатов Report. Выполняет связывание, инициализацию и расчет.
+ *
+ *  Один вызов calculate() - один кадр длительностью frameStep. За кадр
+ *  модель делает frameStep/step шагов интегрирования. Кадры вызываются:
+ *   - подряд с максимальной скоростью функцией run();
+ *   - по часам потоком Thread (режим реального времени).
  * \ingroup kernel
 */
 class DispOS4 : public ICalculateElement
@@ -29,17 +33,33 @@ public:
 
     //! связывание и инициализация всех модулей
     bool prepare();
-    //! моделирование до времени tEnd, с
+    //! моделирование до времени tEnd с максимальной скоростью, с
     void run(double tEnd);
 
+    //! один кадр расчета
     virtual void calculate() override;
     virtual void finite() override {}
+
+    //! длительность кадра, с (по умолчанию 0.01 - 100 Гц, как Hz100 в SimTVRS)
+    void setFrameStep(double value){frameStep = value;}
+    double frameStepSec(){return frameStep;}
+    //! время окончания моделирования, с (0 - без ограничения)
+    void setEndTime(double value){tEnd = value;}
+    //! период вывода состояния в консоль, с модельного времени (0 - не выводить)
+    void setConsolePeriod(double value){consolePeriod = value;}
 
     //! модель квадрокоптера (для настройки параметров до prepare())
     OS4Vehicle *vehicle(){return os4;}
 private:
+    //! вывести строку состояния в консоль
+    void printState();
+
     OS4Vehicle *os4;
     Report     *report;
+    double      frameStep;
+    double      tEnd;
+    double      consolePeriod;
+    double      nextConsole;
 };
 
 #endif // DISP_OS4_H

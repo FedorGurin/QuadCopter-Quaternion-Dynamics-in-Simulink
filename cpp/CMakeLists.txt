@@ -13,7 +13,10 @@ include_directories(
         kernel/os4
         main/dispOS4
         service/debug
+        service/sys
         )
+
+find_package(Threads REQUIRED)
 
 # ядро и модель квадрокоптера
 add_library(os4kernel STATIC
@@ -39,16 +42,18 @@ add_library(os4kernel STATIC
         kernel/os4/os4Vehicle.cpp
         service/debug/report.h
         service/debug/report.cpp
+        service/sys/threadManager.h
+        service/sys/threadManager.cpp
         main/dispOS4/dispOS4.h
         main/dispOS4/dispOS4.cpp
         )
 
 # программа моделирования
 add_executable(os4sim main/main.cpp)
-target_link_libraries(os4sim os4kernel)
+target_link_libraries(os4sim os4kernel Threads::Threads)
 
 # проверки модели
 enable_testing()
 add_executable(os4test test/os4test.cpp)
-target_link_libraries(os4test os4kernel)
+target_link_libraries(os4test os4kernel Threads::Threads)
 add_test(NAME os4test COMMAND os4test)
