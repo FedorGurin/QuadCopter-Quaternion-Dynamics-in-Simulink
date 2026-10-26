@@ -20,7 +20,7 @@ TOS4Physical os4PhysicalInit();
 */
 TOS4InitState os4InitState(const TOS4Physical &physical);
 
-/*! Настройки модели по умолчанию (поведение как у Simulink-модели)
+/*! Настройки модели по умолчанию (исправленный вариант, см. TOS4Options)
  * \ingroup os4
 */
 TOS4Options os4DefaultOptions();

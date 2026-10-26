@@ -7,8 +7,8 @@
  *   --out    FILE  CSV-файл результатов (по умолчанию os4sim.csv)
  *   --decim  N     писать каждый N-й шаг (по умолчанию 10)
  *   --tau    V     постоянная команда на моторы, Н*м (по умолчанию 0.1)
- *   --gyro-ip      умножать гироскопический момент на Ip
- *   --theta-tip    брать угол лопасти из параметров (12 град) вместо R
+ *   --simulink     вариант "как в Simulink": гироскопический момент без Ip
+ *                  и угол лопасти, равный R (по умолчанию - исправленный вариант)
 */
 #include "dispOS4.h"
 #include "os4Vehicle.h"
@@ -22,7 +22,7 @@
 static void printUsage()
 {
     std::cout << "usage: os4sim [--time T] [--dt H] [--out FILE] [--decim N]"
-                 " [--tau V] [--gyro-ip] [--theta-tip]" << std::endl;
+                 " [--tau V] [--simulink]" << std::endl;
 }
 
 int main(int argc, char *argv[])
@@ -32,8 +32,7 @@ int main(int argc, char *argv[])
     std::string fileName = "os4sim.csv";
     int         decim    = 10;
     double      tau      = 0.1;
-    bool        gyroIp   = false;
-    bool        thetaTip = false;
+    bool        simulink = false;
 
     for(int i = 1; i < argc; i++)
     {
@@ -44,8 +43,7 @@ int main(int argc, char *argv[])
         else if(arg == "--out"   && hasValue) fileName = argv[++i];
         else if(arg == "--decim" && hasValue) decim    = atoi(argv[++i]);
         else if(arg == "--tau"   && hasValue) tau      = atof(argv[++i]);
-        else if(arg == "--gyro-ip")           gyroIp   = true;
-        else if(arg == "--theta-tip")         thetaTip = true;
+        else if(arg == "--simulink")          simulink = true;
         else
         {
             printUsage();
@@ -57,8 +55,11 @@ int main(int argc, char *argv[])
     // настройка модели до инициализации
     OS4Vehicle *os4 = disp.vehicle();
     os4->options.constTau    = tau;
-    os4->options.gyroWithIp  = gyroIp;
-    os4->options.useThetaTip = thetaTip;
+    if(simulink)
+    {
+        os4->options.gyroWithIp  = false;
+        os4->options.useThetaTip = false;
+    }
 
     if(disp.prepare() == false)
         return 1;

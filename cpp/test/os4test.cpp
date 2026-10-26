@@ -75,11 +75,26 @@ static void testSymmetry()
     // тяга направлена вверх (-z) и одинакова у всех винтов
     CHECK(prop->Fe.z < 0.0);
     CHECK_NEAR(prop->T[0], prop->T[3], 1e-12);
+    // угол лопасти 12 град: около 6.8 Н на винт при 2100 рад/с
+    CHECK(prop->T[0] > 6.0 && prop->T[0] < 7.5);
+}
+
+//! вариант "как в Simulink": угол лопасти равен R = 0.075 рад
+static void testSimulinkThetaTip()
+{
+    DispOS4 disp(ID_DispOS4, 0.001, "", 1);
+    OS4Vehicle *os4 = disp.vehicle();
+    os4->initState.q   = TQuaternion();
+    os4->initState.vel = TVector3();
+    os4->options.useThetaTip = false;
+    CHECK(disp.prepare());
+
+    TOS4Propeller *prop = (TOS4Propeller *)disp.findShared(ID_OS4_Propeller);
     // около 1.5 Н на винт при 2100 рад/с (C_T ~ 0.0028)
     CHECK(prop->T[0] > 1.0 && prop->T[0] < 2.0);
 }
 
-//! вариант с исправленным гироскопическим моментом
+//! гироскопический момент с множителем Ip и без него
 static void testGyroIp()
 {
     DispOS4 d1(ID_DispOS4, 0.001, "", 1);
@@ -88,7 +103,8 @@ static void testGyroIp()
     d2.vehicle()->initState.w = TVector3(0.0, 1.0, 0.0);
     d1.vehicle()->initState.omega[0] = 2500.0;   // разные скорости винтов
     d2.vehicle()->initState.omega[0] = 2500.0;
-    d2.vehicle()->options.gyroWithIp = true;
+    d1.vehicle()->options.gyroWithIp = false;   // как в Simulink
+    d2.vehicle()->options.gyroWithIp = true;    // исправленный вариант
     CHECK(d1.prepare());
     CHECK(d2.prepare());
     TOS4Propeller *p1 = (TOS4Propeller *)d1.findShared(ID_OS4_Propeller);
@@ -140,6 +156,7 @@ int main()
 {
     testQuaternion();
     testSymmetry();
+    testSimulinkThetaTip();
     testGyroIp();
     testGroundEffect();
     testRun();

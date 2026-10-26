@@ -69,8 +69,8 @@ TOS4InitState os4InitState(const TOS4Physical &physical)
 TOS4Options os4DefaultOptions()
 {
     TOS4Options opt;
-    opt.gyroWithIp      = false;
-    opt.useThetaTip     = false;
+    opt.gyroWithIp      = true;     // исправление: в Simulink false
+    opt.useThetaTip     = true;     // исправление: в Simulink false
     opt.stopOnCollision = true;
     opt.constControl    = true;
     opt.constTau        = 0.1;

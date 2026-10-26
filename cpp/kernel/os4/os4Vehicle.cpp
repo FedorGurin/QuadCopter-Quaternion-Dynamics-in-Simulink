@@ -80,24 +80,25 @@ void OS4Vehicle::derivatives(const TOS4State &state, TOS4State &dx)
         ele->calculate();
     dx = *dxEval;
 }
+void OS4Vehicle::SDU(const double *in, double *out)
+{
+    TOS4State state, dx;
+    state.fromArray(in);
+    derivatives(state, dx);
+    dx.toArray(out);
+}
 void OS4Vehicle::calculate()
 {
     if(isStop())
         return;
-    double h = step;
-    TOS4State k1, k2, k3, k4;
+    double in [OS4_STATE_SIZE];
+    double out[OS4_STATE_SIZE];
 
     // метод Рунге-Кутты 4-го порядка
-    derivatives(x,                       k1);
-    derivatives(x.addScaled(k1, h / 2.0), k2);
-    derivatives(x.addScaled(k2, h / 2.0), k3);
-    derivatives(x.addScaled(k3, h),       k4);
-
-    x = x.addScaled(k1, h / 6.0)
-         .addScaled(k2, h / 3.0)
-         .addScaled(k3, h / 3.0)
-         .addScaled(k4, h / 6.0);
-    time += h;
+    x.toArray(in);
+    rk4<OS4Vehicle, OS4_STATE_SIZE>(this, in, out, OS4_STATE_SIZE, step);
+    x.fromArray(out);
+    time += step;
 }
 void OS4Vehicle::finite()
 {

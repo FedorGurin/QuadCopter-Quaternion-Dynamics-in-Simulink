@@ -194,5 +194,53 @@ inline double lookupClip(double x, double x1, double y1, double x2, double y2)
     return y1 + (y2 - y1) * (x - x1) / (x2 - x1);
 }
 
+/*! метод Рунге-Кутты 4 порядка (шаблонная)
+ *
+ * Функция перенесена без изменений из SimTVRS (kernel/global/math_func.h).
+ *
+ * @tparam T
+ * @tparam nParam общее кол-во параметров
+ * @param obj объект класса должен содержать функцию SDU
+ * @param inValue начальные значения ОДУ, inValue!=0
+ * @param outValue вычисленные значения ОДУ, outValue!=0
+ * @param nSDU кол-во диф. уравнений
+ * @param step шаг интегрирования, сек
+ */
+template<typename T,int nParam >
+void rk4(T* const obj,
+         double *inValue,
+         double *outValue,
+         int nSDU,
+         double step)
+{
+    double df[nParam][4];
+    double fout[nParam];
+
+    for(int j = 0; j < 4; j++)
+    {
+        if(j == 0)
+            obj->SDU(inValue,fout);
+        else
+            obj->SDU(outValue,fout);
+
+        for(int i = 0; i < nSDU; i++)
+        {
+            df[i][j] = fout[i] *step;
+            outValue[i] = inValue[i];
+            switch(j)
+            {
+            case 0:{outValue[i] += 0.5 * df[i][j];break;}
+            case 1:{outValue[i] += 0.5 * df[i][j];break;}
+            case 2:{outValue[i] += df[i][j];break;}
+            case 3:{outValue[i] += (df[i][0] + 2.0*(df[i][1] + df[i][2]) + df[i][3])/6.0;}
+            }
+        }
+        for(int k = nSDU;k < nParam;k++)
+        {
+            outValue[k] = inValue[k];
+        }
+    }
+}
+
 }
 #endif // MATH_FUNC_H

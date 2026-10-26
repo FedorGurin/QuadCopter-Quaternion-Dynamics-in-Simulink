@@ -16,8 +16,8 @@
  *   4. OS4Propeller  - "Propeller & motor dynamics"
  *   5. OS4Equations  - "12 ODEs"
  *
- *  Интегрирование - метод Рунге-Кутты 4-го порядка с постоянным шагом
- *  (в Simulink - ode45 с переменным шагом).
+ *  Интегрирование - метод Рунге-Кутты 4-го порядка с постоянным шагом,
+ *  функция math_func::rk4 из SimTVRS (в Simulink - ode45 с переменным шагом).
  * \ingroup os4
 */
 class OS4Vehicle : public ICalculateElement
@@ -36,6 +36,11 @@ public:
     void setControl(const double tau[OS4_NUM_ROTORS]);
     //! вычислить производные вектора состояния x
     void derivatives(const TOS4State &x, TOS4State &dx);
+    /*! правые части ОДУ в виде массивов (интерфейс для math_func::rk4)
+     * \param in  - вектор состояния, OS4_STATE_SIZE чисел
+     * \param out - производные,       OS4_STATE_SIZE чисел
+    */
+    void SDU(const double *in, double *out);
 
     //! физические параметры (можно менять до init())
     TOS4Physical  physical;

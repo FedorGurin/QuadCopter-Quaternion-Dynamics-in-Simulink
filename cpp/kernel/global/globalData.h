@@ -88,19 +88,19 @@ typedef struct
 
 /*! \brief Настройки модели
  *
- * По умолчанию все признаки выключены и модель на C++ повторяет
+ * По умолчанию gyroWithIp и useThetaTip включены: это исправленный
+ * вариант модели. Если их выключить, модель на C++ повторяет
  * Simulink-модель OS4dynamics_01.slx один в один, включая ее
- * особенности. Включая признаки, можно исправить найденные неточности
- * и сравнить поведение.
+ * особенности (ключ --simulink программы os4sim).
  * \ingroup data
 */
 typedef struct
 {
-    /*! Умножать гироскопический момент винтов на Ip.
+    /*! Умножать гироскопический момент винтов на Ip (по умолчанию да).
      *  В Simulink множителя нет: M_gyro = [-sum(dir*q*w), sum(dir*p*w), 0]
     */
     bool gyroWithIp;
-    /*! Брать угол на конце лопасти из OS4_physical.prop.thetatip.
+    /*! Брать угол на конце лопасти из OS4_physical.prop.thetatip (по умолчанию да).
      *  В Simulink блок "theta_t" (Fcn u(1)) берет первый элемент шины
      *  geometry, а это радиус винта R = 0.075, т.е. угол ~4.3 град.
     */
@@ -112,6 +112,9 @@ typedef struct
     //! значение постоянной команды на каждый мотор, Н*м (блок Constant [0.1 0.1 0.1 0.1])
     double constTau;
 }TOS4Options;
+
+//! размер вектора состояния: 3+3+3+4 твердое тело, 4 скорости винтов, 4 индуктивных потока \ingroup data
+const int OS4_STATE_SIZE = 13 + 2 * OS4_NUM_ROTORS;
 
 /*! \brief Вектор состояния модели (все интеграторы Simulink)
  *
@@ -150,20 +153,27 @@ public:
     //! интеграторы "lambda_0": индуктивный поток винтов
     double      lambda0[OS4_NUM_ROTORS];
 
-    //! x + k*dx (нужно для метода Рунге-Кутты)
-    TOS4State addScaled(const TOS4State &dx, double k) const
+    //! упаковать в массив из OS4_STATE_SIZE чисел (для math_func::rk4)
+    void toArray(double *v) const
     {
-        TOS4State r;
-        r.pos = pos + dx.pos * k;
-        r.vel = vel + dx.vel * k;
-        r.w   = w   + dx.w   * k;
-        r.q   = q   + dx.q   * k;
-        for(int i = 0; i < OS4_NUM_ROTORS; i++)
-        {
-            r.omega[i]   = omega[i]   + dx.omega[i]   * k;
-            r.lambda0[i] = lambda0[i] + dx.lambda0[i] * k;
-        }
-        return r;
+        int n = 0;
+        v[n++] = pos.x; v[n++] = pos.y; v[n++] = pos.z;
+        v[n++] = vel.x; v[n++] = vel.y; v[n++] = vel.z;
+        v[n++] = w.x;   v[n++] = w.y;   v[n++] = w.z;
+        v[n++] = q.q0;  v[n++] = q.q1;  v[n++] = q.q2;  v[n++] = q.q3;
+        for(int i = 0; i < OS4_NUM_ROTORS; i++) v[n++] = omega[i];
+        for(int i = 0; i < OS4_NUM_ROTORS; i++) v[n++] = lambda0[i];
+    }
+    //! распаковать из массива из OS4_STATE_SIZE чисел
+    void fromArray(const double *v)
+    {
+        int n = 0;
+        pos.x = v[n++]; pos.y = v[n++]; pos.z = v[n++];
+        vel.x = v[n++]; vel.y = v[n++]; vel.z = v[n++];
+        w.x   = v[n++]; w.y   = v[n++]; w.z   = v[n++];
+        q.q0  = v[n++]; q.q1  = v[n++]; q.q2  = v[n++]; q.q3  = v[n++];
+        for(int i = 0; i < OS4_NUM_ROTORS; i++) omega[i]   = v[n++];
+        for(int i = 0; i < OS4_NUM_ROTORS; i++) lambda0[i] = v[n++];
     }
 };
 
