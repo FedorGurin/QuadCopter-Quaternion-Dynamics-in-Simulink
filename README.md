@@ -35,6 +35,9 @@ The animation script will generate a .avi video file in the current folder. Plea
 NOTE: some of the data might be missing and require manual marked-out on the code. This is because some of the data might require the input of controller, which will be release in another project. Contact me if you have any problem running these program.  
   
 
+# C++ version
+A C++14 port of the dynamics model (no MATLAB needed) is in [`cpp/`](cpp/README.md), documented in Russian.
+
 # Reference
 
 ### for Quaternion
