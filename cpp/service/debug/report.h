@@ -4,7 +4,7 @@
 #define REPORT_H
 
 #include "ICalculateElement.h"
-#include "globalData.h"
+#include "os4Data.h"
 #include <fstream>
 #include <string>
 

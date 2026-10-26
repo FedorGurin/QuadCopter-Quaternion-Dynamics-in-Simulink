@@ -1,8 +1,9 @@
 #pragma once
 
-#ifndef GLOBALDATA_H
-#define GLOBALDATA_H
+#ifndef OS4_DATA_H
+#define OS4_DATA_H
 
+#include <stdint.h>
 #include "constants.h"
 #include "math_func.h"
 
@@ -67,24 +68,47 @@ typedef struct
     double      downwashTau;
 }TOS4Physical;
 
-/*! Начальные условия (структуры OS4_initX, OS4_initR, OS4_initC)
+/*! \brief Настроечные параметры модуля OS4: начальные условия
+ *
+ * Аналог структур OS4_initX, OS4_initR, OS4_initC. Доступны через МППМ
+ * под именем "OS4_Setup". Чтобы новые начальные условия вступили в силу
+ * во время работы, нужно записать reset = 1: модель перезапустится
+ * с этими условиями и сбросит признак.
+ *
+ * Только double и один байт в конце - раскладка в памяти простая
+ * (смещения полей приведены в README).
  * \ingroup data
 */
 typedef struct
 {
-    //! положение в земной СК (NED), м
+    //! положение в земной СК (NED, ось z вниз), м
     TVector3    pos;
     //! скорость в земной СК, м/с
     TVector3    vel;
+    //! углы Эйлера 3-2-1 [крен, тангаж, курс], град
+    TVector3    euler;
     //! угловая скорость [p q r] в связанной СК, рад/с
     TVector3    w;
-    //! кватернион ориентации
-    TQuaternion q;
     //! угловые скорости винтов, рад/с
     double      omega[OS4_NUM_ROTORS];
-    //! безразмерная индуктивная скорость lambda_0 = Vi/(omega*R)
-    double      lambda0[OS4_NUM_ROTORS];
-}TOS4InitState;
+    //! начальная индуктивная скорость винтов, м/с (lambda0 = vInd/(omega*R))
+    double      vInd;
+    //! 1 - перезапустить модель с этими начальными условиями
+    uint8_t     reset;
+}TOS4Setup;
+
+/*! \brief Входные параметры модуля OS4 (вход control модели Simulink)
+ *
+ * Доступны через МППМ под именем "OS4_Input".
+ * По умолчанию на все моторы подается 0.1 Н*м (блок Constant
+ * [0.1 0.1 0.1 0.1] перед "Input Switch").
+ * \ingroup data
+*/
+typedef struct
+{
+    //! команда на моторы (момент), Н*м; ограничивается диапазоном [0, 0.2]
+    double tau[OS4_NUM_ROTORS];
+}TOS4Input;
 
 /*! \brief Настройки модели
  *
@@ -107,10 +131,6 @@ typedef struct
     bool useThetaTip;
     //! останавливать расчет при касании винтом земли (Stop Simulation)
     bool stopOnCollision;
-    //! использовать постоянную команду вместо внешнего входа (Manual Switch "Input Switch")
-    bool constControl;
-    //! значение постоянной команды на каждый мотор, Н*м (блок Constant [0.1 0.1 0.1 0.1])
-    double constTau;
 }TOS4Options;
 
 //! размер вектора состояния: 3+3+3+4 твердое тело, 4 скорости винтов, 4 индуктивных потока \ingroup data
@@ -245,8 +265,9 @@ typedef struct
     bool   collision;
 }TOS4Propeller;
 
-/*! Выходы модели (порты stateX, stateB, stateQ, aero V, IMU, Motor Sensor
- * и переменные os4sim_* рабочего пространства MATLAB)
+/*! Выходные параметры модуля OS4 (порты stateX, stateB, stateQ, aero V,
+ * IMU, Motor Sensor и переменные os4sim_* рабочего пространства MATLAB).
+ * Доступны через МППМ под именем "OS4_Output".
  * \ingroup data
 */
 typedef struct
@@ -277,4 +298,4 @@ typedef struct
     double      omega[OS4_NUM_ROTORS];
 }TOS4Output;
 
-#endif // GLOBALDATA_H
+#endif // OS4_DATA_H

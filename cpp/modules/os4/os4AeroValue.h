@@ -4,7 +4,7 @@
 #define OS4_AERO_VALUE_H
 
 #include "ICalculateElement.h"
-#include "globalData.h"
+#include "os4Data.h"
 
 /*! \brief Параметры набегающего потока (подсистемы "vel to Body" и "aero value")
  *

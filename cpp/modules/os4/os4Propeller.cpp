@@ -24,7 +24,7 @@ OS4Propeller::OS4Propeller(uint32_t idClass):ICalculateElement(idClass)
     bindTo(ID_OS4_Options,  &options);
     bindTo(ID_OS4_State,    &state);
     bindTo(ID_OS4_Aero,     &aero);
-    bindTo(ID_OS4_Control,  &control);
+    bindTo(ID_OS4_Input,    &input);
     // открываем интерфейсы
     share(ID_OS4_Propeller, &prop);
 }
@@ -54,7 +54,7 @@ void OS4Propeller::calculate()
         double   omegaR = omega * R;                              // "wR"
 
         // команда мотора
-        prop.tau[i] = saturation(control[i], TAU_MIN, TAU_MAX);
+        prop.tau[i] = saturation(input->tau[i], TAU_MIN, TAU_MAX);
 
         // ---- скорость потока у винта ("Tangent velocity", "vertical speed")
         TVector3 V  = aero->Vb + cross(pqr, r);

@@ -6,6 +6,7 @@
 #include "os4Propeller.h"
 #include "os4Equations.h"
 #include "globalNameID.h"
+#include "IMsg.h"
 #include <iostream>
 
 using namespace math_func;
@@ -17,10 +18,9 @@ OS4Vehicle::OS4Vehicle(uint32_t idClass):ICalculateElement(idClass)
 
     // параметры по умолчанию (аналог OS4dynamics_01_init.m)
     physical  = os4PhysicalInit();
-    initState = os4InitState(physical);
+    setup     = os4SetupInit();
+    input     = os4InputInit();
     options   = os4DefaultOptions();
-    for(int i = 0; i < OS4_NUM_ROTORS; i++)
-        control[i] = 0.0;
 
     // подчиненные модули в порядке расчета
     addElement(new OS4AeroValue(ID_OS4AeroValueModel));
@@ -38,7 +38,8 @@ OS4Vehicle::OS4Vehicle(uint32_t idClass):ICalculateElement(idClass)
     share(ID_OS4_Physical,   &physical);
     share(ID_OS4_Options,    &options);
     share(ID_OS4_State,      &xEval);
-    share(ID_OS4_Control,    control);
+    share(ID_OS4_Input,      &input);
+    share(ID_OS4_Setup,      &setup);
     share(ID_OS4_Output,     &output);
     share(ID_OS4_Time,       &time);
     share(ID_OS4_VehicleObj, this);
@@ -46,34 +47,44 @@ OS4Vehicle::OS4Vehicle(uint32_t idClass):ICalculateElement(idClass)
 void OS4Vehicle::setControl(const double tau[OS4_NUM_ROTORS])
 {
     for(int i = 0; i < OS4_NUM_ROTORS; i++)
-        control[i] = tau[i];
+        input.tau[i] = tau[i];
 }
 void OS4Vehicle::init()
 {
     ICalculateElement::init();
 
+    // регистрация параметров в МППМ (как MsgRegMPPM в SimTVRS)
+    IRegMPPM *mppm = (IRegMPPM *)findShared(ID_MPPM);
+    if(mppm != nullptr)
+    {
+        mppm->addReq(ptrToReq("OS4_Setup",  &setup));
+        mppm->addReq(ptrToReq("OS4_Input",  &input));
+        mppm->addReq(ptrToReq("OS4_Output", &output));
+    }
+    applySetup();
+}
+void OS4Vehicle::applySetup()
+{
     // начальные условия интеграторов
-    x.pos = initState.pos;
-    x.vel = initState.vel;
-    x.w   = initState.w;
-    x.q   = initState.q;
+    x.pos = setup.pos;
+    x.vel = setup.vel;
+    x.w   = setup.w;
+    x.q   = euler321ToQ(setup.euler.x * gradToRad,
+                        setup.euler.y * gradToRad,
+                        setup.euler.z * gradToRad);
     for(int i = 0; i < OS4_NUM_ROTORS; i++)
     {
-        x.omega[i]   = initState.omega[i];
-        x.lambda0[i] = initState.lambda0[i];
+        x.omega[i] = setup.omega[i];
+        double omegaR = setup.omega[i] * physical.prop.rad;
+        x.lambda0[i]  = (fabs(omegaR) > 1e-9) ? setup.vInd / omegaR : 0.0;
     }
-    time = 0.0;
+    time        = 0.0;
+    setup.reset = 0;
     setStart();
     finite();
 }
 void OS4Vehicle::derivatives(const TOS4State &state, TOS4State &dx)
 {
-    // "Input Switch": постоянная команда или внешний вход
-    if(options.constControl)
-    {
-        for(int i = 0; i < OS4_NUM_ROTORS; i++)
-            control[i] = options.constTau;
-    }
     // все подчиненные модули считают по состоянию xEval
     xEval = state;
     for(auto ele : *returnElements())
@@ -89,6 +100,12 @@ void OS4Vehicle::SDU(const double *in, double *out)
 }
 void OS4Vehicle::calculate()
 {
+    // команда перезапуска (например, записанная через МППМ)
+    if(setup.reset != 0)
+    {
+        applySetup();
+        return;
+    }
     if(isStop())
         return;
     double in [OS4_STATE_SIZE];

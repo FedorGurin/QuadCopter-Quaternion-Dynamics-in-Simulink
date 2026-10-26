@@ -13,6 +13,9 @@
  *                  и угол лопасти, равный R (по умолчанию - исправленный вариант)
  *   --realtime     считать в реальном времени (1 с модели = 1 с по часам);
  *                  с --time 0 расчет идет до Ctrl+C
+ *   --mppm         запустить модуль МППМ (UDP, порт 9999): доступны
+ *                  OS4_Setup, OS4_Input, OS4_Output
+ *   --mppm-port N  порт МППМ (включает --mppm)
  *   --print  P     период вывода состояния в консоль, с
  *                  (по умолчанию 0.5 в реальном времени, иначе 0 - не выводить)
 */
@@ -20,6 +23,7 @@
 #include "os4Vehicle.h"
 #include "globalNameID.h"
 #include "threadManager.h"
+#include "mppm.h"
 
 #include <atomic>
 #include <chrono>
@@ -41,7 +45,8 @@ static void onSignal(int)
 static void printUsage()
 {
     std::cout << "usage: os4sim [--time T] [--dt H] [--out FILE] [--decim N]"
-                 " [--tau V] [--simulink] [--realtime] [--freq F] [--print P]" << std::endl;
+                 " [--tau V] [--simulink] [--realtime] [--freq F] [--print P]"
+                 " [--mppm] [--mppm-port N]" << std::endl;
 }
 
 int main(int argc, char *argv[])
@@ -54,6 +59,8 @@ int main(int argc, char *argv[])
     double      tau      = 0.1;
     bool        simulink = false;
     bool        realtime = false;
+    bool        useMppm  = false;
+    int         mppmPort = MPPM_DEFAULT_PORT;
     double      print    = -1.0;
 
     for(int i = 1; i < argc; i++)
@@ -67,6 +74,8 @@ int main(int argc, char *argv[])
         else if(arg == "--tau"   && hasValue) tau      = atof(argv[++i]);
         else if(arg == "--simulink")          simulink = true;
         else if(arg == "--realtime")          realtime = true;
+        else if(arg == "--mppm")              useMppm  = true;
+        else if(arg == "--mppm-port" && hasValue){mppmPort = atoi(argv[++i]); useMppm = true;}
         else if(arg == "--freq"  && hasValue) freq     = atof(argv[++i]);
         else if(arg == "--print" && hasValue) print    = atof(argv[++i]);
         else
@@ -98,7 +107,8 @@ int main(int argc, char *argv[])
     }
     // настройка модели до инициализации
     OS4Vehicle *os4 = disp.vehicle();
-    os4->options.constTau    = tau;
+    for(int i = 0; i < OS4_NUM_ROTORS; i++)
+        os4->input.tau[i] = tau;
     if(simulink)
     {
         os4->options.gyroWithIp  = false;
@@ -113,8 +123,30 @@ int main(int argc, char *argv[])
     disp.setEndTime(tEnd);
     disp.setConsolePeriod(print >= 0.0 ? print : (realtime ? 0.5 : 0.0));
 
+    // модуль МППМ: создается до prepare(), чтобы модель зарегистрировала в нем свои данные
+    MPPM *mppm = nullptr;
+    if(useMppm)
+    {
+        mppm = disp.createMPPM((uint16_t)mppmPort);
+        if(mppm == nullptr)
+            return 1;
+    }
+
     if(disp.prepare() == false)
         return 1;
+
+    // поток МППМ без таймера: ждет запросы и сразу отвечает
+    Thread *threadMPPM = nullptr;
+    if(mppm != nullptr)
+    {
+        threadMPPM = new Thread("pthMPPM", mppm, 0.0);
+        threadMPPM->setUseTimer(false);
+        threadMPPM->create();
+        std::cout << "MPPM: порт " << mppmPort << ", зарегистрировано:";
+        for(const auto &t : mppm->table)
+            std::cout << " " << t.name << "(" << t.size << " байт)";
+        std::cout << std::endl;
+    }
 
     if(realtime)
     {
@@ -137,6 +169,13 @@ int main(int argc, char *argv[])
     }
     else
         disp.run(tEnd);
+
+    if(threadMPPM != nullptr)
+    {
+        threadMPPM->stop();
+        threadMPPM->join();
+        delete threadMPPM;
+    }
 
     const TOS4Output &o = os4->output;
     std::cout << "t = "         << o.time << " c" << std::endl

@@ -22,12 +22,14 @@ enum EGlobalProtoID{
     ID_OS4PropellerModel        ,   /*подсистема "Propeller & motor dynamics"*/
     ID_OS4EquationsModel        ,   /*подсистема "12 ODEs"*/
     ID_REPORT                   ,   /*запись результатов в файл*/
+    ID_MPPM                     ,   /*модуль МППМ и его интерфейс регистрации IRegMPPM*/
 
     //! ---------- открытые данные ----------
     ID_OS4_Physical             ,   /*физические параметры (OS4_physical)*/
     ID_OS4_Options              ,   /*настройки модели*/
     ID_OS4_State                ,   /*вектор состояния, по которому считаются производные*/
-    ID_OS4_Control              ,   /*команда на моторы (вход control)*/
+    ID_OS4_Input                ,   /*входные параметры: команда на моторы (вход control)*/
+    ID_OS4_Setup                ,   /*настроечные параметры: начальные условия*/
     ID_OS4_Aero                 ,   /*сигнал Aero: [Vb, Vinf, psi, theta, rho]*/
     ID_OS4_Gravity              ,   /*сила тяжести и g в связанной СК (IMU_acc_g)*/
     ID_OS4_Fuselage             ,   /*силы и моменты корпуса*/

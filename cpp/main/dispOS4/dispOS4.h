@@ -8,6 +8,7 @@
 
 class OS4Vehicle;
 class Report;
+class MPPM;
 
 /*! \brief Диспетчер моделирования квадрокоптера
  *
@@ -39,13 +40,21 @@ public:
     virtual void calculate() override;
     virtual void finite() override {}
 
-    //! время окончания моделирования, с (0 - без ограничения)
+    /*! время окончания моделирования, с (0 - без ограничения:
+     *  после касания земли модель ждет перезапуска через OS4_Setup.reset)
+    */
     void setEndTime(double value){tEnd = value;}
     //! период вывода состояния в консоль, с модельного времени (0 - не выводить)
     void setConsolePeriod(double value){consolePeriod = value;}
 
     //! модель квадрокоптера (для настройки параметров до prepare())
     OS4Vehicle *vehicle(){return os4;}
+    /*! Создать модуль МППМ (вызывать до prepare()).
+     *  Модуль МППМ не считается в calculate() диспетчера: его нужно
+     *  запустить в отдельном потоке Thread без таймера.
+     * \return указатель на модуль или nullptr, если порт не открылся
+    */
+    MPPM *createMPPM(uint16_t port);
 private:
     //! вывести строку состояния в консоль
     void printState();
@@ -55,6 +64,7 @@ private:
     double      tEnd;
     double      consolePeriod;
     double      nextConsole;
+    double      lastTime;
 };
 
 #endif // DISP_OS4_H

@@ -3,7 +3,7 @@
 #ifndef OS4_INIT_H
 #define OS4_INIT_H
 
-#include "globalData.h"
+#include "os4Data.h"
 
 /*! \defgroup os4 Модель квадрокоптера OS4
  *  \brief Перенос Simulink-модели OS4dynamics_01.slx на C++
@@ -18,7 +18,12 @@ TOS4Physical os4PhysicalInit();
 /*! Начальные условия (функции OS4dynamics_init_state и OS4actuator_init)
  * \ingroup os4
 */
-TOS4InitState os4InitState(const TOS4Physical &physical);
+TOS4Setup os4SetupInit();
+
+/*! Входные параметры по умолчанию (0.1 Н*м на каждый мотор)
+ * \ingroup os4
+*/
+TOS4Input os4InputInit();
 
 /*! Настройки модели по умолчанию (исправленный вариант, см. TOS4Options)
  * \ingroup os4

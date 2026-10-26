@@ -4,7 +4,7 @@
 #define OS4_VEHICLE_H
 
 #include "ICalculateElement.h"
-#include "globalData.h"
+#include "os4Data.h"
 
 /*! \brief Квадрокоптер OS4 (верхний уровень модели OS4dynamics_01.slx)
  *
@@ -15,6 +15,9 @@
  *   3. OS4Fuselage   - "fuselage aerodynamics"
  *   4. OS4Propeller  - "Propeller & motor dynamics"
  *   5. OS4Equations  - "12 ODEs"
+ *
+ *  Настроечные (setup), входные (input) и выходные (output) параметры
+ *  регистрируются в МППМ при init(), если модуль МППМ запущен.
  *
  *  Интегрирование - метод Рунге-Кутты 4-го порядка, функция math_func::rk4
  *  из SimTVRS: один шаг на каждый вызов calculate(). Шаг задает диспетчер
@@ -33,8 +36,10 @@ public:
     //! расчет выходов модели на текущем шаге
     virtual void finite() override;
 
-    //! задать команду на моторы, Н*м
+    //! задать команду на моторы, Н*м (то же, что запись в input)
     void setControl(const double tau[OS4_NUM_ROTORS]);
+    //! перезапустить модель с начальными условиями из setup
+    void applySetup();
     //! вычислить производные вектора состояния x
     void derivatives(const TOS4State &x, TOS4State &dx);
     /*! правые части ОДУ в виде массивов (интерфейс для math_func::rk4)
@@ -45,11 +50,13 @@ public:
 
     //! физические параметры (можно менять до init())
     TOS4Physical  physical;
-    //! начальные условия (можно менять до init())
-    TOS4InitState initState;
+    //! настроечные параметры: начальные условия (МППМ: "OS4_Setup")
+    TOS4Setup     setup;
+    //! входные параметры: команда на моторы (МППМ: "OS4_Input")
+    TOS4Input     input;
     //! настройки модели
     TOS4Options   options;
-    //! выходы модели
+    //! выходные параметры (МППМ: "OS4_Output")
     TOS4Output    output;
     //! модельное время, с
     double        time;
@@ -59,8 +66,6 @@ private:
     TOS4State  x;
     //! состояние, по которому подчиненные модули считают производные
     TOS4State  xEval;
-    //! команда на моторы
-    double     control[OS4_NUM_ROTORS];
 
     //! выходы подчиненных модулей
     TOS4Aero      *aero;

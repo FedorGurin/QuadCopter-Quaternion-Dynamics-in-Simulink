@@ -42,28 +42,34 @@ TOS4Physical os4PhysicalInit()
     return physical;
 }
 
-TOS4InitState os4InitState(const TOS4Physical &physical)
+TOS4Setup os4SetupInit()
 {
-    TOS4InitState init;
+    TOS4Setup setup;
 
     // поступательное движение
-    init.vel = TVector3(0.1, 0.0, 0.0);
-    init.pos = TVector3(0.1, 0.1, -4.0);   // ось z вниз: высота 4 м
+    setup.vel = TVector3(0.1, 0.0, 0.0);
+    setup.pos = TVector3(0.1, 0.1, -4.0);   // ось z вниз: высота 4 м
 
     // вращательное движение
-    init.w = TVector3(0.0, 0.0, 0.0);
-    init.q = math_func::euler321ToQ(0.0,                // крен
-                                    -30.0 * gradToRad,  // тангаж
-                                    0.0);               // курс
+    setup.w     = TVector3(0.0, 0.0, 0.0);
+    setup.euler = TVector3(0.0,      // крен,   град
+                           -30.0,    // тангаж, град
+                           0.0);     // курс,   град
 
     // моторы и индуктивный поток
-    double V_ind = 6.0;   // индуктивная скорость, м/с
     for(int i = 0; i < OS4_NUM_ROTORS; i++)
-    {
-        init.omega[i]   = 2100.0;
-        init.lambda0[i] = V_ind / (init.omega[i] * physical.prop.rad);
-    }
-    return init;
+        setup.omega[i] = 2100.0;
+    setup.vInd  = 6.0;                // индуктивная скорость, м/с
+    setup.reset = 0;
+    return setup;
+}
+
+TOS4Input os4InputInit()
+{
+    TOS4Input input;
+    for(int i = 0; i < OS4_NUM_ROTORS; i++)
+        input.tau[i] = 0.1;
+    return input;
 }
 
 TOS4Options os4DefaultOptions()
@@ -72,7 +78,5 @@ TOS4Options os4DefaultOptions()
     opt.gyroWithIp      = true;     // исправление: в Simulink false
     opt.useThetaTip     = true;     // исправление: в Simulink false
     opt.stopOnCollision = true;
-    opt.constControl    = true;
-    opt.constTau        = 0.1;
     return opt;
 }

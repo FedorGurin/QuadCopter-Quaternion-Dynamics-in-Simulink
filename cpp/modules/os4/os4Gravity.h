@@ -4,7 +4,7 @@
 #define OS4_GRAVITY_H
 
 #include "ICalculateElement.h"
-#include "globalData.h"
+#include "os4Data.h"
 
 /*! \brief Сила тяжести (подсистема "gravity")
  *

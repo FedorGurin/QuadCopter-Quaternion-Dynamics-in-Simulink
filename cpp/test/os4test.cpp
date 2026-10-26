@@ -6,6 +6,10 @@
 #include "globalNameID.h"
 #include "math_func.h"
 #include "threadManager.h"
+#include "mppm.h"
+
+#include <stddef.h>
+#include <string.h>
 
 #include <chrono>
 #include <thread>
@@ -67,8 +71,8 @@ static void testSymmetry()
 {
     DispOS4 disp(ID_DispOS4, "", 1);
     OS4Vehicle *os4 = disp.vehicle();
-    os4->initState.q   = TQuaternion();
-    os4->initState.vel = TVector3();
+    os4->setup.euler = TVector3();
+    os4->setup.vel = TVector3();
     CHECK(disp.prepare());
 
     TOS4Propeller *prop = (TOS4Propeller *)disp.findShared(ID_OS4_Propeller);
@@ -88,8 +92,8 @@ static void testSimulinkThetaTip()
 {
     DispOS4 disp(ID_DispOS4, "", 1);
     OS4Vehicle *os4 = disp.vehicle();
-    os4->initState.q   = TQuaternion();
-    os4->initState.vel = TVector3();
+    os4->setup.euler = TVector3();
+    os4->setup.vel = TVector3();
     os4->options.useThetaTip = false;
     CHECK(disp.prepare());
 
@@ -103,10 +107,10 @@ static void testGyroIp()
 {
     DispOS4 d1(ID_DispOS4, "", 1);
     DispOS4 d2(ID_DispOS4, "", 1);
-    d1.vehicle()->initState.w = TVector3(0.0, 1.0, 0.0);
-    d2.vehicle()->initState.w = TVector3(0.0, 1.0, 0.0);
-    d1.vehicle()->initState.omega[0] = 2500.0;   // разные скорости винтов
-    d2.vehicle()->initState.omega[0] = 2500.0;
+    d1.vehicle()->setup.w = TVector3(0.0, 1.0, 0.0);
+    d2.vehicle()->setup.w = TVector3(0.0, 1.0, 0.0);
+    d1.vehicle()->setup.omega[0] = 2500.0;   // разные скорости винтов
+    d2.vehicle()->setup.omega[0] = 2500.0;
     d1.vehicle()->options.gyroWithIp = false;   // как в Simulink
     d2.vehicle()->options.gyroWithIp = true;    // исправленный вариант
     CHECK(d1.prepare());
@@ -123,11 +127,11 @@ static void testGroundEffect()
 {
     DispOS4 high(ID_DispOS4, "", 1);
     DispOS4 low (ID_DispOS4, "", 1);
-    high.vehicle()->initState.q = TQuaternion();
-    low .vehicle()->initState.q = TQuaternion();
-    high.vehicle()->initState.vel = TVector3();
-    low .vehicle()->initState.vel = TVector3();
-    low .vehicle()->initState.pos = TVector3(0.0, 0.0, -0.15);   // винты на высоте 0.2 м
+    high.vehicle()->setup.euler = TVector3();
+    low .vehicle()->setup.euler = TVector3();
+    high.vehicle()->setup.vel = TVector3();
+    low .vehicle()->setup.vel = TVector3();
+    low .vehicle()->setup.pos = TVector3(0.0, 0.0, -0.15);   // винты на высоте 0.2 м
     CHECK(high.prepare());
     CHECK(low.prepare());
     TOS4Propeller *ph = (TOS4Propeller *)high.findShared(ID_OS4_Propeller);
@@ -186,6 +190,115 @@ static void testRealtime()
     CHECK_NEAR(rt.vehicle()->output.Xe.z, fast.vehicle()->output.Xe.z, 1e-12);
 }
 
+//! клиент МППМ: отправить запрос и дождаться ответа
+template<typename T> static bool mppmExchange(UdpSocket &client, T &req, uint16_t serverPort, uint16_t clientPort)
+{
+    req.head.port = clientPort;
+    req.head.size = sizeof(T);
+    if(client.sendTo((const uint8_t *)&req, sizeof(T), serverPort, "127.0.0.1") != (int)sizeof(T))
+        return false;
+    return client.receiveFrom((uint8_t *)&req, sizeof(T)) > 0;
+}
+//! найти индекс участка памяти по имени
+static int16_t mppmIndex(UdpSocket &client, const char *name, uint16_t serverPort, uint16_t clientPort)
+{
+    TMemRequest mem;
+    memset(&mem, 0, sizeof(mem));
+    mem.head.type = R_T_LISTPM;
+    mem.head.rwm  = E_REQ_READ;
+    mem.index     = -1;
+    strncpy((char *)mem.name, name, SIZE_NAME - 1);
+    if(!mppmExchange(client, mem, serverPort, clientPort))
+        return -1;
+    return mem.index;
+}
+
+//! МППМ: чтение выходов, запись входов и начальных условий по UDP
+static void testMPPM()
+{
+    const uint16_t serverPort = 19999;
+    const uint16_t clientPort = 19998;
+
+    DispOS4 disp(ID_DispOS4, "", 1);
+    MPPM *mppm = disp.createMPPM(serverPort);
+    CHECK(mppm != nullptr);
+    if(mppm == nullptr)
+        return;
+    CHECK(disp.prepare());
+    CHECK(mppm->table.size() == 3);
+
+    Thread thread("pthMPPM", mppm, 0.0);
+    thread.create();
+
+    UdpSocket client;
+    CHECK(client.init(clientPort, "127.0.0.1"));
+    CHECK(client.bindTo());
+    client.setTimeout(1000);
+
+    int16_t iSetup  = mppmIndex(client, "OS4_Setup",  serverPort, clientPort);
+    int16_t iInput  = mppmIndex(client, "OS4_Input",  serverPort, clientPort);
+    int16_t iOutput = mppmIndex(client, "OS4_Output", serverPort, clientPort);
+    CHECK(iSetup == 0 && iInput == 1 && iOutput == 2);
+    CHECK(mppmIndex(client, "NoSuchName", serverPort, clientPort) == -1);
+
+    // запись: высота 10 м, перезапуск и новая команда на мотор 1
+    TSelectedRequest sel;
+    memset(&sel, 0, sizeof(sel));
+    sel.head.type = R_T_SELECTED;
+    sel.head.rwm  = E_REQ_WRITE;
+    sel.numValues = 3;
+    double z = -10.0, tau = 0.15;
+    uint8_t reset = 1;
+    sel.values[0].indexInTable = iSetup;
+    sel.values[0].offset       = offsetof(TOS4Setup, pos) + offsetof(TVector3, z);
+    sel.values[0].byte         = sizeof(double);
+    memcpy(sel.values[0].value, &z, sizeof(double));
+    sel.values[1].indexInTable = iSetup;
+    sel.values[1].offset       = offsetof(TOS4Setup, reset);
+    sel.values[1].byte         = 1;
+    sel.values[1].value[0]     = reset;
+    sel.values[2].indexInTable = iInput;
+    sel.values[2].offset       = offsetof(TOS4Input, tau);
+    sel.values[2].byte         = sizeof(double);
+    memcpy(sel.values[2].value, &tau, sizeof(double));
+    CHECK(mppmExchange(client, sel, serverPort, clientPort));
+    CHECK(sel.values[0].err == NOT_ERROR && sel.values[2].err == NOT_ERROR);
+
+    OS4Vehicle *os4 = disp.vehicle();
+    CHECK_NEAR(os4->setup.pos.z, -10.0, 1e-12);
+    CHECK_NEAR(os4->input.tau[0], 0.15, 1e-12);
+
+    // шаг диспетчера: модель перезапускается с новыми начальными условиями
+    disp.calculate();
+    disp.calculate();
+    CHECK(os4->setup.reset == 0);
+    CHECK_NEAR(os4->output.Xe.z, -10.0, 1e-3);
+
+    // чтение выходов целиком
+    TModuleRequest mod;
+    memset(&mod, 0, sizeof(mod));
+    mod.head.type = R_T_MODULE;
+    mod.head.rwm  = E_REQ_READ;
+    mod.index     = iOutput;
+    CHECK(mppmExchange(client, mod, serverPort, clientPort));
+    CHECK(mod.err == NOT_ERROR);
+    CHECK(mod.sizeBuf == sizeof(TOS4Output));
+    TOS4Output out;
+    memcpy(&out, mod.buffer, sizeof(out));
+    CHECK_NEAR(out.time, os4->output.time, 1e-12);
+    CHECK_NEAR(out.Xe.z, os4->output.Xe.z, 1e-12);
+
+    // ошибка индекса
+    sel.numValues = 1;
+    sel.head.rwm  = E_REQ_READ;
+    sel.values[0].indexInTable = 7;
+    CHECK(mppmExchange(client, sel, serverPort, clientPort));
+    CHECK(sel.values[0].err == INDEX_TOO_MACH);
+
+    thread.stop();
+    thread.join();
+}
+
 int main()
 {
     testQuaternion();
@@ -195,6 +308,7 @@ int main()
     testGroundEffect();
     testRun();
     testRealtime();
+    testMPPM();
     if(failed == 0)
         std::cout << "all tests passed" << std::endl;
     return failed == 0 ? 0 : 1;

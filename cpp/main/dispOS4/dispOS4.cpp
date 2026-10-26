@@ -1,6 +1,7 @@
 #include "dispOS4.h"
 #include "os4Vehicle.h"
 #include "report.h"
+#include "mppm.h"
 #include "globalNameID.h"
 #include <iostream>
 #include <iomanip>
@@ -12,6 +13,7 @@ DispOS4::DispOS4(uint32_t idClass, const std::string &fileName, int decim)
     tEnd          = 0.0;
     consolePeriod = 0.0;
     nextConsole   = 0.0;
+    lastTime      = 0.0;
 
     os4 = new OS4Vehicle(ID_OS4Vehicle);
     addElement(os4);
@@ -24,6 +26,14 @@ DispOS4::DispOS4(uint32_t idClass, const std::string &fileName, int decim)
     }
     // частота расчета (шаг передается всем подчиненным модулям)
     setFreq(ICalculateElement::Hz400);
+}
+MPPM* DispOS4::createMPPM(uint16_t port)
+{
+    MPPM *mppm = new MPPM(TSettingMPPM(port), ID_MPPM);
+    addElement(mppm);
+    if(mppm->isOpen() == false)
+        return nullptr;
+    return mppm;
 }
 bool DispOS4::prepare()
 {
@@ -39,26 +49,32 @@ bool DispOS4::prepare()
         return false;
     }
     nextConsole = 0.0;
+    lastTime    = 0.0;
     setStart();
     return true;
 }
 void DispOS4::calculate()
 {
+    // шаг модели (или перезапуск по setup.reset), затем выходы и запись
+    os4->calculate();
     if(os4->isStop() == false)
     {
-        // шаг модели, затем расчет выходов и запись
-        os4->calculate();
         os4->finite();
         if(report != nullptr)
             report->calculate();
     }
+    // модель перезапущена - время пошло сначала
+    if(os4->time < lastTime)
+        nextConsole = 0.0;
+    lastTime = os4->time;
+
     // половина шага - защита от накопления ошибки округления времени
     if(consolePeriod > 0.0 && os4->time + 0.5 * step >= nextConsole)
     {
         printState();
         nextConsole += consolePeriod;
     }
-    if(os4->isStop() || (tEnd > 0.0 && os4->time + 0.5 * step >= tEnd))
+    if(tEnd > 0.0 && (os4->isStop() || os4->time + 0.5 * step >= tEnd))
         setStop();
 }
 void DispOS4::run(double tEnd_)

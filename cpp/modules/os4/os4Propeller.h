@@ -4,7 +4,7 @@
 #define OS4_PROPELLER_H
 
 #include "ICalculateElement.h"
-#include "globalData.h"
+#include "os4Data.h"
 
 /*! \brief Винты и моторы (подсистема "Propeller & motor dynamics")
  *
@@ -51,8 +51,8 @@ private:
     TOS4State    *state;
     //! параметры потока
     TOS4Aero     *aero;
-    //! команда на моторы (массив из 4 моментов), Н*м
-    double       *control;
+    //! входные параметры: команда на моторы, Н*м
+    TOS4Input    *input;
 };
 
 #endif // OS4_PROPELLER_H

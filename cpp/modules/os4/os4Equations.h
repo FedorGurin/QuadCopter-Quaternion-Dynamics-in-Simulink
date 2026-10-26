@@ -4,7 +4,7 @@
 #define OS4_EQUATIONS_H
 
 #include "ICalculateElement.h"
-#include "globalData.h"
+#include "os4Data.h"
 
 /*! \brief Правые части уравнений движения (подсистема "12 ODEs")
  *

@@ -4,7 +4,7 @@
 #define OS4_FUSELAGE_H
 
 #include "ICalculateElement.h"
-#include "globalData.h"
+#include "os4Data.h"
 
 /*! \brief Аэродинамика корпуса (подсистема "fuselage aerodynamics")
  *
