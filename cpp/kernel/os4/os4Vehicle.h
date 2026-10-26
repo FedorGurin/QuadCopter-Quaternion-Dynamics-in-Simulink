@@ -16,14 +16,15 @@
  *   4. OS4Propeller  - "Propeller & motor dynamics"
  *   5. OS4Equations  - "12 ODEs"
  *
- *  Интегрирование - метод Рунге-Кутты 4-го порядка с постоянным шагом,
- *  функция math_func::rk4 из SimTVRS (в Simulink - ode45 с переменным шагом).
+ *  Интегрирование - метод Рунге-Кутты 4-го порядка, функция math_func::rk4
+ *  из SimTVRS: один шаг на каждый вызов calculate(). Шаг задает диспетчер
+ *  через setFreq() (в Simulink - ode45 с переменным шагом).
  * \ingroup os4
 */
 class OS4Vehicle : public ICalculateElement
 {
 public:
-    OS4Vehicle(uint32_t idClass, double step_ = 0.001);
+    OS4Vehicle(uint32_t idClass);
 
     //! установка начальных условий
     virtual void init() override;

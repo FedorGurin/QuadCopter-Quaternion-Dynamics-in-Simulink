@@ -10,7 +10,7 @@
 
 using namespace math_func;
 
-OS4Vehicle::OS4Vehicle(uint32_t idClass, double step_):ICalculateElement(idClass, step_)
+OS4Vehicle::OS4Vehicle(uint32_t idClass):ICalculateElement(idClass)
 {
     stringUId = "OS4dynamics_01";
     time      = 0.0;

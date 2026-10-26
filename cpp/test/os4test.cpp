@@ -65,7 +65,7 @@ static void testQuaternion()
 //! горизонтальное положение без движения: моменты должны уравновеситься
 static void testSymmetry()
 {
-    DispOS4 disp(ID_DispOS4, 0.001, "", 1);
+    DispOS4 disp(ID_DispOS4, "", 1);
     OS4Vehicle *os4 = disp.vehicle();
     os4->initState.q   = TQuaternion();
     os4->initState.vel = TVector3();
@@ -86,7 +86,7 @@ static void testSymmetry()
 //! вариант "как в Simulink": угол лопасти равен R = 0.075 рад
 static void testSimulinkThetaTip()
 {
-    DispOS4 disp(ID_DispOS4, 0.001, "", 1);
+    DispOS4 disp(ID_DispOS4, "", 1);
     OS4Vehicle *os4 = disp.vehicle();
     os4->initState.q   = TQuaternion();
     os4->initState.vel = TVector3();
@@ -101,8 +101,8 @@ static void testSimulinkThetaTip()
 //! гироскопический момент с множителем Ip и без него
 static void testGyroIp()
 {
-    DispOS4 d1(ID_DispOS4, 0.001, "", 1);
-    DispOS4 d2(ID_DispOS4, 0.001, "", 1);
+    DispOS4 d1(ID_DispOS4, "", 1);
+    DispOS4 d2(ID_DispOS4, "", 1);
     d1.vehicle()->initState.w = TVector3(0.0, 1.0, 0.0);
     d2.vehicle()->initState.w = TVector3(0.0, 1.0, 0.0);
     d1.vehicle()->initState.omega[0] = 2500.0;   // разные скорости винтов
@@ -121,8 +121,8 @@ static void testGyroIp()
 //! влияние земли увеличивает тягу у поверхности
 static void testGroundEffect()
 {
-    DispOS4 high(ID_DispOS4, 0.001, "", 1);
-    DispOS4 low (ID_DispOS4, 0.001, "", 1);
+    DispOS4 high(ID_DispOS4, "", 1);
+    DispOS4 low (ID_DispOS4, "", 1);
     high.vehicle()->initState.q = TQuaternion();
     low .vehicle()->initState.q = TQuaternion();
     high.vehicle()->initState.vel = TVector3();
@@ -140,15 +140,20 @@ static void testGroundEffect()
 //! полный прогон 5 с: числа конечные, кватернион единичный
 static void testRun()
 {
-    DispOS4 disp(ID_DispOS4, 0.001, "", 1);
+    DispOS4 disp(ID_DispOS4, "", 1);
     CHECK(disp.prepare());
     disp.run(5.0);
     const TOS4Output &o = disp.vehicle()->output;
     CHECK(std::isfinite(o.Xe.z) && std::isfinite(o.pqr.x) && std::isfinite(o.omega[0]));
     CHECK_NEAR(norm(o.q), 1.0, 1e-9);
 
-    // уменьшение шага почти не меняет результат (проверка интегрирования)
-    DispOS4 fine(ID_DispOS4, 0.0005, "", 1);
+    // по умолчанию 400 Гц
+    CHECK(disp.isFreq() == ICalculateElement::Hz400);
+    CHECK_NEAR(disp.vehicle()->timeStep(), 0.0025, 1e-15);
+
+    // уменьшение шага в 10 раз почти не меняет результат (проверка интегрирования)
+    DispOS4 fine(ID_DispOS4, "", 1);
+    fine.setTimeStep(0.00025);
     CHECK(fine.prepare());
     fine.run(o.time);
     const TOS4Output &f = fine.vehicle()->output;
@@ -159,14 +164,14 @@ static void testRun()
 //! реальное время: 0.3 с модели считаются за ~0.3 с по часам и дают тот же результат
 static void testRealtime()
 {
-    DispOS4 fast(ID_DispOS4, 0.001, "", 1);
+    DispOS4 fast(ID_DispOS4, "", 1);
     CHECK(fast.prepare());
     fast.run(0.3);
 
-    DispOS4 rt(ID_DispOS4, 0.001, "", 1);
+    DispOS4 rt(ID_DispOS4, "", 1);
     rt.setEndTime(0.3);
     CHECK(rt.prepare());
-    Thread thread("pthTest", &rt, rt.frameStepSec());
+    Thread thread("pthTest", &rt, rt.timeStep());
     thread.setUseTimer(true);
 
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
@@ -175,7 +180,7 @@ static void testRealtime()
     double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 
     CHECK(thread.isFinished());
-    CHECK(thread.callCount == 30);
+    CHECK(thread.callCount == 120);   // 0.3 с * 400 Гц
     CHECK(wall > 0.28 && wall < 0.5);
     CHECK_NEAR(rt.vehicle()->output.time, 0.3, 1e-9);
     CHECK_NEAR(rt.vehicle()->output.Xe.z, fast.vehicle()->output.Xe.z, 1e-12);

@@ -5,6 +5,7 @@ ICalculateElement::ICalculateElement(uint32_t idClass_, double step_)
 {
     idClass     = idClass_;
     step        = step_;
+    frequency   = HzInf;
     bindSuccess = false;
     m_parent    = nullptr;
     m_stop      = false;
@@ -76,4 +77,33 @@ void ICalculateElement::init()
 {
     for(auto ele : elements)
         ele->init();
+}
+double ICalculateElement::freqToHz(Freq f)
+{
+    switch(f)
+    {
+    case Hz1:    return 1.0;
+    case Hz6_25: return 6.25;
+    case Hz12_5: return 12.5;
+    case Hz25:   return 25.0;
+    case Hz50:   return 50.0;
+    case Hz100:  return 100.0;
+    case Hz200:  return 200.0;
+    case Hz400:  return 400.0;
+    default:     return 0.0;
+    }
+}
+void ICalculateElement::setTimeStep(double value)
+{
+    step      = value;
+    frequency = HzInf;
+    for(auto ele : elements)
+        ele->setTimeStep(value);
+}
+void ICalculateElement::setFreq(Freq f)
+{
+    if(f == HzInf)
+        return;
+    setTimeStep(1.0 / freqToHz(f));
+    frequency = f;
 }

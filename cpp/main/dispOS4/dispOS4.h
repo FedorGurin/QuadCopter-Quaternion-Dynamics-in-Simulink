@@ -14,10 +14,10 @@ class Report;
  *  Корень дерева модулей: содержит модель OS4Vehicle и модуль записи
  *  результатов Report. Выполняет связывание, инициализацию и расчет.
  *
- *  Один вызов calculate() - один кадр длительностью frameStep. За кадр
- *  модель делает frameStep/step шагов интегрирования. Кадры вызываются:
+ *  Частота расчета задается setFreq(), по умолчанию Hz400: один вызов
+ *  calculate() - один шаг интегрирования 2.5 мс. Шаги вызываются:
  *   - подряд с максимальной скоростью функцией run();
- *   - по часам потоком Thread (режим реального времени).
+ *   - по часам потоком Thread с периодом timeStep() (реальное время).
  * \ingroup kernel
 */
 class DispOS4 : public ICalculateElement
@@ -25,24 +25,20 @@ class DispOS4 : public ICalculateElement
 public:
     /*!
      * \param idClass  - имя класса модуля
-     * \param step_    - шаг интегрирования, с
      * \param fileName - CSV-файл для результатов (пустая строка - не писать)
      * \param decim    - записывать каждый decim-й шаг
     */
-    DispOS4(uint32_t idClass, double step_, const std::string &fileName, int decim);
+    DispOS4(uint32_t idClass, const std::string &fileName, int decim);
 
     //! связывание и инициализация всех модулей
     bool prepare();
     //! моделирование до времени tEnd с максимальной скоростью, с
     void run(double tEnd);
 
-    //! один кадр расчета
+    //! один шаг расчета
     virtual void calculate() override;
     virtual void finite() override {}
 
-    //! длительность кадра, с (по умолчанию 0.01 - 100 Гц, как Hz100 в SimTVRS)
-    void setFrameStep(double value){frameStep = value;}
-    double frameStepSec(){return frameStep;}
     //! время окончания моделирования, с (0 - без ограничения)
     void setEndTime(double value){tEnd = value;}
     //! период вывода состояния в консоль, с модельного времени (0 - не выводить)
@@ -56,7 +52,6 @@ private:
 
     OS4Vehicle *os4;
     Report     *report;
-    double      frameStep;
     double      tEnd;
     double      consolePeriod;
     double      nextConsole;

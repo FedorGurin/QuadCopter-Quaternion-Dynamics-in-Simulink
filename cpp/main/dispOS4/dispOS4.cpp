@@ -5,16 +5,15 @@
 #include <iostream>
 #include <iomanip>
 
-DispOS4::DispOS4(uint32_t idClass, double step_, const std::string &fileName, int decim)
-    :ICalculateElement(idClass, step_)
+DispOS4::DispOS4(uint32_t idClass, const std::string &fileName, int decim)
+    :ICalculateElement(idClass)
 {
     stringUId     = "dispOS4";
-    frameStep     = 0.01;
     tEnd          = 0.0;
     consolePeriod = 0.0;
     nextConsole   = 0.0;
 
-    os4 = new OS4Vehicle(ID_OS4Vehicle, step_);
+    os4 = new OS4Vehicle(ID_OS4Vehicle);
     addElement(os4);
 
     report = nullptr;
@@ -23,6 +22,8 @@ DispOS4::DispOS4(uint32_t idClass, double step_, const std::string &fileName, in
         report = new Report(ID_REPORT, fileName, decim);
         addElement(report);
     }
+    // частота расчета (шаг передается всем подчиненным модулям)
+    setFreq(ICalculateElement::Hz400);
 }
 bool DispOS4::prepare()
 {
@@ -37,21 +38,13 @@ bool DispOS4::prepare()
         std::cerr << "DispOS4: can't open report file" << std::endl;
         return false;
     }
-    if(frameStep < step)
-        frameStep = step;
     nextConsole = 0.0;
     setStart();
     return true;
 }
 void DispOS4::calculate()
 {
-    // модельное время конца кадра
-    double tFrame = os4->time + frameStep;
-    if(tEnd > 0.0 && tFrame > tEnd)
-        tFrame = tEnd;
-
-    // половина шага - защита от накопления ошибки округления времени
-    while(os4->time + 0.5 * step < tFrame && os4->isStop() == false)
+    if(os4->isStop() == false)
     {
         // шаг модели, затем расчет выходов и запись
         os4->calculate();
@@ -59,6 +52,7 @@ void DispOS4::calculate()
         if(report != nullptr)
             report->calculate();
     }
+    // половина шага - защита от накопления ошибки округления времени
     if(consolePeriod > 0.0 && os4->time + 0.5 * step >= nextConsole)
     {
         printState();

@@ -43,11 +43,22 @@ typedef struct
 class ICalculateElement
 {
 public:
+    //! Частота вызова модуля (как в SimTVRS)
+    enum Freq{Hz1   ,  /*!< Частота 1Гц*/
+              Hz6_25,  /*!< Частота 6.25 Гц*/
+              Hz12_5,  /*!< Частота 12.5 Гц*/
+              Hz25  ,  /*!< Частота 25 Гц*/
+              Hz50  ,  /*!< Частота 50 Гц*/
+              Hz100 ,  /*!< Частота 100 Гц*/
+              Hz200 ,  /*!< Частота 200 Гц*/
+              Hz400 ,  /*!< Частота 400 Гц*/
+              HzInf};  /*!< Шаг задан вручную функцией setTimeStep() */
+
     /*!
      * \param idClass - уникальное имя класса модуля (EGlobalProtoID)
      * \param step_   - шаг расчета, с
     */
-    ICalculateElement(uint32_t idClass, double step_ = 0.001);
+    ICalculateElement(uint32_t idClass, double step_ = 0.01);
     virtual ~ICalculateElement();
 
     //! Функция для выполнения связывания (рекурсивно для потомков)
@@ -92,8 +103,18 @@ public:
 
     //! шаг расчета, с
     double timeStep(){return step;}
-    //! задать шаг расчета, с
-    void setTimeStep(double value){step = value;}
+    /*! задать шаг расчета, с (вместе с подчиненными модулями)
+     *  Частота при этом становится HzInf - "задана вручную".
+    */
+    void setTimeStep(double value);
+    /*! Задать частоту вызова модуля
+     *  Шаг расчета модуля и всех подчиненных модулей становится 1/f.
+    */
+    void setFreq(Freq f);
+    //! текущая частота в enum
+    Freq isFreq(){return frequency;}
+    //! частота в Гц для значения enum (0 для HzInf)
+    static double freqToHz(Freq f);
 
     //! останов модели
     void setStop() {m_stop = true;}
@@ -112,6 +133,8 @@ public:
 protected:
     //! шаг расчета, с
     double step;
+    //! частота в enum
+    Freq   frequency;
 
 private:
     //! поиск в поддереве

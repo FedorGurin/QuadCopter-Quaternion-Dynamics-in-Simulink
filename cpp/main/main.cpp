@@ -3,15 +3,16 @@
  *
  *  Параметры командной строки:
  *   --time   T     время моделирования, с (по умолчанию 5, как StopTime в Simulink)
- *   --dt     H     шаг интегрирования, с (по умолчанию 0.001)
+ *   --freq   F     частота расчета, Гц: 1, 6.25, 12.5, 25, 50, 100, 200, 400
+ *                  (по умолчанию 400 - setFreq(Hz400), шаг 2.5 мс)
+ *   --dt     H     задать шаг интегрирования вручную, с (вместо --freq)
  *   --out    FILE  CSV-файл результатов (по умолчанию os4sim.csv)
- *   --decim  N     писать каждый N-й шаг (по умолчанию 10)
+ *   --decim  N     писать каждый N-й шаг (по умолчанию 4, т.е. раз в 10 мс)
  *   --tau    V     постоянная команда на моторы, Н*м (по умолчанию 0.1)
  *   --simulink     вариант "как в Simulink": гироскопический момент без Ip
  *                  и угол лопасти, равный R (по умолчанию - исправленный вариант)
  *   --realtime     считать в реальном времени (1 с модели = 1 с по часам);
  *                  с --time 0 расчет идет до Ctrl+C
- *   --frame  F     длительность кадра реального времени, с (по умолчанию 0.01)
  *   --print  P     период вывода состояния в консоль, с
  *                  (по умолчанию 0.5 в реальном времени, иначе 0 - не выводить)
 */
@@ -26,6 +27,7 @@
 #include <iostream>
 #include <thread>
 #include <string>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,19 +41,19 @@ static void onSignal(int)
 static void printUsage()
 {
     std::cout << "usage: os4sim [--time T] [--dt H] [--out FILE] [--decim N]"
-                 " [--tau V] [--simulink] [--realtime] [--frame F] [--print P]" << std::endl;
+                 " [--tau V] [--simulink] [--realtime] [--freq F] [--print P]" << std::endl;
 }
 
 int main(int argc, char *argv[])
 {
     double      tEnd     = 5.0;
-    double      dt       = 0.001;
+    double      dt       = 0.0;      // 0 - шаг задается частотой
+    double      freq     = 400.0;
     std::string fileName = "os4sim.csv";
-    int         decim    = 10;
+    int         decim    = 4;
     double      tau      = 0.1;
     bool        simulink = false;
     bool        realtime = false;
-    double      frame    = 0.01;
     double      print    = -1.0;
 
     for(int i = 1; i < argc; i++)
@@ -65,7 +67,7 @@ int main(int argc, char *argv[])
         else if(arg == "--tau"   && hasValue) tau      = atof(argv[++i]);
         else if(arg == "--simulink")          simulink = true;
         else if(arg == "--realtime")          realtime = true;
-        else if(arg == "--frame" && hasValue) frame    = atof(argv[++i]);
+        else if(arg == "--freq"  && hasValue) freq     = atof(argv[++i]);
         else if(arg == "--print" && hasValue) print    = atof(argv[++i]);
         else
         {
@@ -74,7 +76,26 @@ int main(int argc, char *argv[])
         }
     }
 
-    DispOS4 disp(ID_DispOS4, dt, fileName, decim);
+    DispOS4 disp(ID_DispOS4, fileName, decim);
+    // частота расчета
+    if(dt > 0.0)
+        disp.setTimeStep(dt);
+    else
+    {
+        ICalculateElement::Freq f = ICalculateElement::HzInf;
+        for(int k = ICalculateElement::Hz1; k < ICalculateElement::HzInf; k++)
+        {
+            ICalculateElement::Freq fk = (ICalculateElement::Freq)k;
+            if(fabs(ICalculateElement::freqToHz(fk) - freq) < 1e-9)
+                f = fk;
+        }
+        if(f == ICalculateElement::HzInf)
+        {
+            std::cerr << "--freq: допустимы 1, 6.25, 12.5, 25, 50, 100, 200, 400" << std::endl;
+            return 1;
+        }
+        disp.setFreq(f);
+    }
     // настройка модели до инициализации
     OS4Vehicle *os4 = disp.vehicle();
     os4->options.constTau    = tau;
@@ -89,7 +110,6 @@ int main(int argc, char *argv[])
         std::cerr << "--time 0 допускается только с --realtime" << std::endl;
         return 1;
     }
-    disp.setFrameStep(frame);
     disp.setEndTime(tEnd);
     disp.setConsolePeriod(print >= 0.0 ? print : (realtime ? 0.5 : 0.0));
 
@@ -98,9 +118,9 @@ int main(int argc, char *argv[])
 
     if(realtime)
     {
-        // поток с таймером: один кадр расчета за каждый период frame
+        // поток с таймером: один шаг расчета за каждый период timeStep()
         std::signal(SIGINT, onSignal);
-        Thread thread("pthOS4", &disp, disp.frameStepSec());
+        Thread thread("pthOS4", &disp, disp.timeStep());
         thread.setUseTimer(true);
         thread.create();
         while(thread.isFinished() == false)
@@ -110,10 +130,10 @@ int main(int argc, char *argv[])
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
         thread.join();
-        std::cout << "кадров: " << thread.callCount
+        std::cout << "шагов: " << thread.callCount
                   << ", не уложились в период: " << thread.missingCallCount
-                  << ", макс. время кадра: " << thread.maxCalcTime * 1000.0 << " мс"
-                  << " (период " << disp.frameStepSec() * 1000.0 << " мс)" << std::endl;
+                  << ", макс. время шага: " << thread.maxCalcTime * 1000.0 << " мс"
+                  << " (период " << disp.timeStep() * 1000.0 << " мс)" << std::endl;
     }
     else
         disp.run(tEnd);
